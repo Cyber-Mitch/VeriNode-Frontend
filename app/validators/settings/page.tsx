@@ -39,7 +39,7 @@ export default function ValidatorSettingsPage() {
     refreshRequests();
   }, [refreshRequests]);
 
-  const handleWizardComplete = (requestId: string) => {
+  const handleWizardComplete = () => {
     setShowWizard(false);
     refreshRequests();
   };

@@ -2,7 +2,7 @@
  * Unit tests for governance service
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   loadGovernanceConfig,
   saveGovernanceConfig,

@@ -9,7 +9,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useWithdrawalChange } from '@/hooks/useWithdrawalChange';
 import { loadGovernanceConfig } from '@/services/governanceService';
 import type { BLSToExecutionChangeMessage, GovernanceConfig, ApproverNotification } from '@/types/withdrawalChange';
@@ -38,6 +38,7 @@ export function WithdrawalChangeWizard({
   const [requestId, setRequestId] = useState<string | null>(null);
   const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfig | null>(null);
   const [notifications, setNotifications] = useState<ApproverNotification[]>([]);
+  const prevApprovalProgressRef = useRef<boolean>(false);
 
   // Step 1 state
   const [validatorIndex, setValidatorIndex] = useState(defaultValidatorIndex?.toString() ?? '');
@@ -154,12 +155,24 @@ export function WithdrawalChangeWizard({
 
   /**
    * Move to approval monitoring step when threshold is met
+   * Using useEffect with ref to avoid cascading renders
    */
   useEffect(() => {
-    if (step === 3 && approvalProgress?.isComplete) {
-      setStep(4);
+    const isComplete = approvalProgress?.isComplete ?? false;
+    
+    // Only transition once when approval becomes complete
+    if (step === 3 && isComplete && !prevApprovalProgressRef.current) {
+      // Use setTimeout to defer state update to next tick
+      const timer = setTimeout(() => {
+        setStep(4);
+      }, 0);
+      
+      return () => clearTimeout(timer);
     }
-  }, [approvalProgress, step]);
+    
+    // Update ref to track completion status
+    prevApprovalProgressRef.current = isComplete;
+  }, [approvalProgress?.isComplete, step]);
 
   const canProceedToStep2 = validatorIndex && blsPubkey && executionAddress;
   const isUserApprover = governanceConfig?.approvers.some(
