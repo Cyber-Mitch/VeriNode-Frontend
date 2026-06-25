@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type {
   ReputationDataPoint,
   ChartPerformanceMetrics,
-} from '@/src/types/reputation';
-import { simulateMultiNodeRecovery } from '@/src/hooks/useReputationStream';
+} from '@/types/reputation';
+import { simulateMultiNodeRecovery } from '@/hooks/useReputationStream';
 
 /**
  * Performance test utilities
