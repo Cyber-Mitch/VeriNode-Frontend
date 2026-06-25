@@ -6,6 +6,7 @@ import { ValidatorUnlockCard } from '@/src/components/validators/ValidatorUnlock
 import { ExitQueuePositionCard } from '@/src/components/validators/ExitQueuePositionCard'
 import { CommitteeTopologyMap } from '@/src/components/canvas/CommitteeTopologyMap'
 import { ShardLegend } from '@/src/components/validators/ShardLegend'
+import { ConsolidationDashboard } from '@/src/components/validators/ConsolidationDashboard'
 import { useValidatorBalances } from '@/src/hooks/useValidatorBalances'
 import { useCommitteeAssignments } from '@/src/hooks/useCommitteeAssignments'
 import { StakingCalculator } from '@/src/components/validators/StakingCalculator'
@@ -27,6 +28,7 @@ export function ValidatorDashboard({
   const [open, setOpen] = useState(true)
   const [queueOpen, setQueueOpen] = useState(true)
   const [topoOpen, setTopoOpen] = useState(true)
+  const [consolidationOpen, setConsolidationOpen] = useState(true)
   const { byValidator } = useValidatorBalances(validatorIndices, { beaconNodeUrl })
   const committee = useCommitteeAssignments(validatorIndices, { beaconNodeUrl })
 
@@ -101,6 +103,29 @@ export function ValidatorDashboard({
               <ExitQueuePositionCard key={vi} validatorIndex={vi} beaconNodeUrl={beaconNodeUrl} />
             ))}
           </div>
+        )}
+      </section>
+
+      <section className="overflow-hidden rounded-3xl border border-white/10 bg-slate-900/80 text-white">
+        <button
+          type="button"
+          onClick={() => setConsolidationOpen((o) => !o)}
+          className="flex w-full items-center justify-between gap-4 p-6 text-left"
+          aria-expanded={consolidationOpen}
+        >
+          <div>
+            <h2 className="text-xl font-semibold">Consolidation</h2>
+            <p className="text-sm text-slate-400">
+              EIP-7251 merge recommendations · {validatorIndices.length} validators
+            </p>
+          </div>
+          <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 text-lg text-slate-300">
+            {consolidationOpen ? '−' : '+'}
+          </span>
+        </button>
+
+        {consolidationOpen && (
+          <ConsolidationDashboard validatorIndices={validatorIndices} byValidator={byValidator} />
         )}
       </section>
 
