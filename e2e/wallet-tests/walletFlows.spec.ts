@@ -420,7 +420,6 @@ test.describe('Wallet E2E - Account Switching', () => {
     await page.evaluate((publicKey) => {
       // Update the mock wallet to return the new account
       if (window.stellarWeb3) {
-        const originalGetPublicKey = window.stellarWeb3.getPublicKey;
         window.stellarWeb3.getPublicKey = async () => publicKey;
       }
       

@@ -1,0 +1,7 @@
+{
+  "stake": { "instructions": 5000000, "writeBytes": 5000, "readBytes": 10000 },
+  "unstake": { "instructions": 4500000, "writeBytes": 4000, "readBytes": 9000 },
+  "delegate": { "instructions": 3000000, "writeBytes": 3000, "readBytes": 7000 },
+  "registerNode": { "instructions": 8000000, "writeBytes": 12000, "readBytes": 15000 },
+  "submitAttestation": { "instructions": 2000000, "writeBytes": 1500, "readBytes": 5000 }
+}

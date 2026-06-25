@@ -3,6 +3,7 @@
 import React from 'react';
 import { QueryProvider } from '@/src/components/providers/QueryProvider';
 import { WalletProvider } from '@/src/components/providers/WalletProvider';
+import { ThemeProvider } from '@/src/components/providers/ThemeProvider';
 import { useAuthStore } from '@/src/store/authStore';
 import { useStakingStore } from '@/src/store/stakingStore';
 
@@ -21,12 +22,14 @@ function TestStoreExposer({ children }: { children: React.ReactNode }) {
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <QueryProvider>
-      <WalletProvider>
-        <TestStoreExposer>
-          {children}
-        </TestStoreExposer>
-      </WalletProvider>
-    </QueryProvider>
+    <ThemeProvider>
+      <QueryProvider>
+        <WalletProvider>
+          <TestStoreExposer>
+            {children}
+          </TestStoreExposer>
+        </WalletProvider>
+      </QueryProvider>
+    </ThemeProvider>
   );
 }

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, it, expect, beforeAll, afterAll, afterEach, beforeEach, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';

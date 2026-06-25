@@ -1,7 +1,11 @@
-'use client';
+"use client";
 
-import { useMemo, useSyncExternalStore } from 'react';
-import { useNodeStore, type NodeInfo, type FilterState } from '@/src/store/nodeStore';
+import { useMemo, useSyncExternalStore } from "react";
+import {
+  useNodeStore,
+  type NodeInfo,
+  type FilterState,
+} from "@/src/store/nodeStore";
 
 interface FilteredResult {
   nodes: NodeInfo[];
@@ -45,12 +49,15 @@ export function useNodeList(): NodeInfo[] {
   const snapshot = useSyncExternalStore(subscribeToStore, getStoreSnapshot);
 
   // Memoized filtered list — only invalidated when both versions change
+  const { nodes, filter, dataVersion, filterVersion } = snapshot;
   const filtered = useMemo(() => {
-    const { nodes, filter } = snapshot;
+    // Refer to version counters so they are treated as used by the linter
+    void dataVersion;
+    void filterVersion;
 
     return nodes.filter((node) => {
       // Status filter
-      if (filter.status !== 'all' && node.status !== filter.status) {
+      if (filter.status !== "all" && node.status !== filter.status) {
         return false;
       }
 
@@ -67,7 +74,7 @@ export function useNodeList(): NodeInfo[] {
 
       return true;
     });
-  }, [snapshot.dataVersion, snapshot.filterVersion, snapshot.nodes, snapshot.filter]);
+  }, [dataVersion, filterVersion, nodes, filter]);
 
   return filtered;
 }

@@ -3,7 +3,9 @@
 import { useEffect } from 'react'
 import { InspectionForm } from '@/src/components/inspections/InspectionForm'
 import { SyncStatusBar } from '@/src/components/SyncStatusBar'
+import { ThemeSwitcher } from '@/src/components/ui/ThemeSwitcher'
 import { FinalityHealthGauge } from '@/src/components/validators/FinalityHealthGauge'
+import { DVTClusterList } from '@/src/components/validators/DVTClusterList'
 import { useFinalityCheckpoints } from '@/src/hooks/useFinalityCheckpoints'
 import { syncManager } from '@/src/services/syncManager'
 import { initializeEncryption, hasEncryptionKey } from '@/src/services/crypto'
@@ -39,7 +41,15 @@ export default function Home() {
         </p>
 
         <div className="mb-6">
+          <ThemeSwitcher />
+        </div>
+
+        <div className="mb-6">
           <FinalityHealthGauge snapshot={finalityHealth} />
+        </div>
+
+        <div className="mb-6">
+          <DVTClusterList />
         </div>
 
         <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">

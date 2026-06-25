@@ -1,17 +1,17 @@
-import { defineConfig } from 'vitest/config';
-import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vitest/config'
+import path from 'path'
 
+// Scoped to colocated unit tests under src/. The Playwright e2e specs in e2e/
+// are intentionally excluded so the two runners never collide. Suites that need
+// a DOM opt in per-file via `// @vitest-environment jsdom`.
 export default defineConfig({
-  test: {
-    environment: 'jsdom',
-    globals: true,
-    include: ['src/**/*.test.{ts,tsx}'],
-  },
   resolve: {
     alias: {
-      // Mirror the tsconfig "@/*" -> project root mapping so unit tests can
-      // import modules the same way the app does (e.g. "@/src/hooks/...").
-      '@': fileURLToPath(new URL('./', import.meta.url)),
+      '@': path.resolve(__dirname, '.'),
     },
   },
-});
+  test: {
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    environment: 'node',
+  },
+})

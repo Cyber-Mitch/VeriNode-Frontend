@@ -19,10 +19,6 @@ interface LoginEvalResult {
   error?: string;
 }
 
-interface AuthEvalResult {
-  isAuthenticated: boolean;
-  walletType: string | null;
-}
 
 interface ErrorResult {
   error?: string;
