@@ -1,6 +1,7 @@
 // Soroban transaction model + resource→fee math for pre-flight estimation.
 
 import { SorobanBalance } from '@/src/utils/sorobanMath'
+import type { StakingAction } from '@/src/store/stakingStore'
 
 export type TransactionType =
   | 'stake'
@@ -95,4 +96,67 @@ export function buildTransaction(
   const operations: SorobanOperation[] = opTypes.map((t) => ({ type: t, label: transactionLabel(t) }))
   const xdr = toBase64(`${type}|${opTypes.join(',')}|${JSON.stringify(options.params ?? {})}`)
   return { type, xdr, operations }
+}
+
+// ── Optimistic staking builder ──────────────────────────────────────────────
+// Builds the envelope consumed by the optimistic staking hook. Kept separate
+// from buildTransaction() above (which serves pre-flight fee estimation) so the
+// staking lifecycle owns its own deterministic, dedupe-friendly payload.
+
+const STAKING_CONTRACT_METHOD: Record<StakingAction, string> = {
+  stake: 'stake',
+  unstake: 'unstake',
+  restake: 'restake',
+  delegate: 'delegate',
+  undelegate: 'undelegate',
+}
+
+export interface StakingTxParams {
+  action: StakingAction
+  amount: number
+  /** Source account public key (G...). */
+  source: string
+  /** Optional explicit sequence number; callers usually let the RPC assign it. */
+  sequence?: number
+}
+
+export interface BuiltStakingTx {
+  /** The envelope XDR string passed to the RPC client. */
+  xdr: string
+  method: string
+  amount: number
+  source: string
+}
+
+/**
+ * Build a staking transaction envelope.
+ *
+ * Validates the staking intent and serialises it into a stable XDR payload.
+ * The payload is deterministic for a given (method, amount, source, sequence)
+ * so identical re-submissions hash to the same value and can be de-duplicated.
+ */
+export function buildStakingTransaction(params: StakingTxParams): BuiltStakingTx {
+  const { action, amount, source, sequence } = params
+
+  if (!source || !source.startsWith('G')) {
+    throw new Error('Invalid source account')
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Stake amount must be a positive number')
+  }
+
+  const method = STAKING_CONTRACT_METHOD[action]
+  if (!method) {
+    throw new Error(`Unsupported staking action: ${action}`)
+  }
+
+  const envelope = {
+    v: 1,
+    method,
+    args: { amount: amount.toString(), staker: source },
+    seq: sequence ?? null,
+  }
+
+  const json = JSON.stringify(envelope)
+  return { xdr: toBase64(json), method, amount, source }
 }

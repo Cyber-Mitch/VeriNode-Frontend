@@ -2,7 +2,8 @@ import { defineConfig } from 'vitest/config'
 import path from 'path'
 
 // Scoped to colocated unit tests under src/. The Playwright e2e specs in e2e/
-// are intentionally excluded so the two runners never collide.
+// are intentionally excluded so the two runners never collide. Suites that need
+// a DOM opt in per-file via `// @vitest-environment jsdom`.
 export default defineConfig({
   resolve: {
     alias: {

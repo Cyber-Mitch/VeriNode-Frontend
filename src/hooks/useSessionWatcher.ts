@@ -58,7 +58,7 @@ export function useSessionWatcher() {
     watcherRef.current = watcher
 
     const unsubDisconnect = watcher.on("disconnected", ({ walletType: wType }) => {
-      const txCount = useStakingStore.getState().pendingTransactions
+      const txCount = useStakingStore.getState().pending.length
       if (txCount > 0) return
 
       setDisconnectedWallet(wType)
@@ -76,7 +76,7 @@ export function useSessionWatcher() {
             previousRoute: previousRouteRef.current,
             walletType: wType,
             sessionDuration: Date.now() - (sessionStartRef.current ?? Date.now()),
-            pendingTransactionsCount: useStakingStore.getState().pendingTransactions,
+            pendingTransactionsCount: useStakingStore.getState().pending.length,
           })
           logout()
         }
@@ -122,7 +122,7 @@ export function useSessionWatcher() {
           previousRoute: previousRouteRef.current,
           walletType: walletType ?? "unknown",
           sessionDuration: Date.now() - (sessionStartRef.current ?? Date.now()),
-          pendingTransactionsCount: useStakingStore.getState().pendingTransactions,
+          pendingTransactionsCount: useStakingStore.getState().pending.length,
         })
         logout()
       }

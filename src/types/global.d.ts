@@ -10,10 +10,19 @@ interface AuthStore {
   logout: () => void
 }
 
+interface StakingPendingEntry {
+  optimisticTxId: string
+  action: string
+  amount: number
+  realTxHash: string | null
+  status: "pending" | "confirmed" | "failed"
+  createdAt: number
+  error: { reason: string } | null
+}
+
 interface StakingStore {
-  pendingTransactions: number
-  incrementPending: () => void
-  decrementPending: () => void
+  optimisticBalance: number | null
+  pending: StakingPendingEntry[]
   reset: () => void
 }
 

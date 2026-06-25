@@ -35,6 +35,8 @@
     "@playwright/test": "^1.52.0",
     "@stellar/stellar-sdk": "^16.0.1",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.1.0",
     "@types/node": "^20",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
@@ -42,6 +44,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "fast-check": "^3.23.2",
+    "jsdom": "^25.0.1",
+    "msw": "^2.6.8",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^3.2.4"
