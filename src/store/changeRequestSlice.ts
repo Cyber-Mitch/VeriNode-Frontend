@@ -4,6 +4,7 @@
  * Manages request lifecycle, concurrent requests, and real-time updates.
  */
 
+import { useEffect } from 'react';
 import { create } from 'zustand';
 import type { 
   WithdrawalChangeRequest, 
@@ -507,16 +508,18 @@ function generateRequestId(): string {
 export function useExpiryCleanup(intervalMs = 60000): void {
   const cleanupExpired = useChangeRequestStore(state => state.cleanupExpired);
 
-  if (typeof window !== 'undefined') {
-    // Run cleanup on mount
-    cleanupExpired();
-
-    // Set up periodic cleanup
-    const interval = setInterval(() => {
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      // Run cleanup on mount
       cleanupExpired();
-    }, intervalMs);
 
-    // Cleanup on unmount
-    return () => clearInterval(interval);
-  }
+      // Set up periodic cleanup
+      const interval = setInterval(() => {
+        cleanupExpired();
+      }, intervalMs);
+
+      // Cleanup on unmount
+      return () => clearInterval(interval);
+    }
+  }, [cleanupExpired, intervalMs]);
 }

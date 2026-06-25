@@ -133,7 +133,7 @@ function bytesToHex(bytes: Uint8Array): string {
 export async function sha256(data: Uint8Array): Promise<Uint8Array> {
   if (typeof window !== 'undefined' && window.crypto?.subtle) {
     // Browser environment
-    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+    const hashBuffer = await window.crypto.subtle.digest('SHA-256', data as BufferSource);
     return new Uint8Array(hashBuffer);
   } else {
     // Node.js environment (for tests)
