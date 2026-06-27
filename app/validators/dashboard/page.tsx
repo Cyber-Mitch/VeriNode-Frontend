@@ -2,7 +2,12 @@
 
 import { Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { ValidatorDashboard } from '@/src/components/validators/ValidatorDashboard'
+import dynamic from 'next/dynamic'
+
+const ValidatorDashboard = dynamic(
+  () => import('@/src/components/validators/ValidatorDashboard').then((m) => m.ValidatorDashboard),
+  { ssr: false, loading: () => <div className="p-8 text-slate-400">Loading dashboard…</div> },
+)
 
 function DashboardRoute() {
   const params = useSearchParams()

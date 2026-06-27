@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import withBundleAnalyzer from "@next/bundle-analyzer";
 
 // Content-Security-Policy as defense-in-depth for issue #9. The app is
 // statically pre-rendered, so a per-request nonce can't be embedded; inline
@@ -59,4 +60,4 @@ const nextConfig: NextConfig = {
   ],
 };
 
-export default nextConfig;
+export default withBundleAnalyzer({ enabled: process.env.ANALYZE === "true" })(nextConfig);

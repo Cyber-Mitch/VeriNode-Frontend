@@ -1,7 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { ReputationChart } from '@/src/components/reputation/ReputationChart';
+import dynamic from 'next/dynamic';
+import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton';
+
+const ReputationChart = dynamic(
+  () => import('@/src/components/reputation/ReputationChart').then((m) => m.ReputationChart),
+  { ssr: false, loading: () => <ChartSkeleton height={320} /> },
+);
 
 /**
  * Demo page for ReputationChart component

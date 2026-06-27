@@ -4,7 +4,13 @@ import { useMemo, useState } from 'react'
 import { BalanceReconciliationTable } from '@/src/components/validators/BalanceReconciliationTable'
 import { ValidatorUnlockCard } from '@/src/components/validators/ValidatorUnlockCard'
 import { ExitQueuePositionCard } from '@/src/components/validators/ExitQueuePositionCard'
-import { CommitteeTopologyMap } from '@/src/components/canvas/CommitteeTopologyMap'
+import dynamic from 'next/dynamic'
+import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton'
+
+const CommitteeTopologyMap = dynamic(
+  () => import('@/src/components/canvas/CommitteeTopologyMap').then((m) => m.CommitteeTopologyMap),
+  { ssr: false, loading: () => <ChartSkeleton height={240} /> },
+)
 import { ShardLegend } from '@/src/components/validators/ShardLegend'
 import { ConsolidationDashboard } from '@/src/components/validators/ConsolidationDashboard'
 import { useValidatorBalances } from '@/src/hooks/useValidatorBalances'

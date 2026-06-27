@@ -1,7 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { DVTClusterGauge } from '@/src/components/validators/DVTClusterGauge'
+import dynamic from 'next/dynamic'
+import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton'
+
+const DVTClusterGauge = dynamic(
+  () => import('@/src/components/validators/DVTClusterGauge').then((m) => m.DVTClusterGauge),
+  { ssr: false, loading: () => <ChartSkeleton height={80} /> },
+)
 import { useDVTClusterHealth } from '@/src/hooks/useDVTClusterHealth'
 
 const DOT = {

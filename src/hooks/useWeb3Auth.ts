@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthStore } from "@/src/store/authStore";
 import { useStakingStore } from "@/src/store/stakingStore";
 import * as authApi from "@/src/lib/api/auth";
-import { detectWalletSigner, type WalletSigner } from "@/src/lib/walletSigners";
+import type { WalletSigner } from "@/src/lib/walletSigners";
 
 const REFRESH_LEAD_MS = 60_000; // refresh 1 minute before expiry
 
@@ -71,29 +71,28 @@ export function useWeb3Auth() {
       .then((session) => {
         if (cancelled) return;
         if (session.valid && session.expiresAt > Date.now()) {
-          const signer = detectWalletSigner();
-          if (signer) {
-            signer
-              .getPublicKey()
-              .then((publicKey) => {
-                if (!cancelled) {
-                  authLogin(signer.walletType, publicKey, session.expiresAt);
-                  scheduleRefresh(session.expiresAt);
-                }
-              })
-              .catch(() => {
-                // Wallet not connected but session cookie is valid —
-                // mark as authenticated with placeholder address
-                if (!cancelled) {
-                  authLogin("freighter", "G...", session.expiresAt);
-                }
-              });
-          } else {
-            // No wallet extension detected; still restore session
-            if (!cancelled) {
-              authLogin("unknown", "G...", session.expiresAt);
+          import("@/src/lib/walletSigners").then(({ detectWalletSigner }) => {
+            const signer = detectWalletSigner();
+            if (signer) {
+              signer
+                .getPublicKey()
+                .then((publicKey) => {
+                  if (!cancelled) {
+                    authLogin(signer.walletType, publicKey, session.expiresAt);
+                    scheduleRefresh(session.expiresAt);
+                  }
+                })
+                .catch(() => {
+                  if (!cancelled) {
+                    authLogin("freighter", "G...", session.expiresAt);
+                  }
+                });
+            } else {
+              if (!cancelled) {
+                authLogin("unknown", "G...", session.expiresAt);
+              }
             }
-          }
+          });
         }
       })
       .catch(() => {
@@ -128,7 +127,8 @@ export function useWeb3Auth() {
       // Step 1: Get challenge from server
       const challenge = await authApi.getChallenge();
 
-      // Step 2: Detect wallet provider
+      // Step 2: Detect wallet provider (deferred — only loaded on first login)
+      const { detectWalletSigner } = await import("@/src/lib/walletSigners");
       const signer: WalletSigner | null = detectWalletSigner();
       if (!signer) {
         throw new Error(
