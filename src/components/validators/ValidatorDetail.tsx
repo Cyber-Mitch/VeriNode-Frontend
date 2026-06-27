@@ -1,12 +1,22 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { SyncCommitteeHeatmap } from '@/src/components/canvas/SyncCommitteeHeatmap'
+import dynamic from 'next/dynamic'
+import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton'
 import { SyncCommitteeSummary } from '@/src/components/validators/SyncCommitteeSummary'
-import { DelayHistogram } from '@/src/components/canvas/DelayHistogram'
 import { EpochRangeSelector } from '@/src/components/validators/EpochRangeSelector'
 import { useSyncCommitteeHistory } from '@/src/hooks/useSyncCommitteeHistory'
 import { useAttestationInclusion, MIN_SPAN } from '@/src/hooks/useAttestationInclusion'
+
+const SyncCommitteeHeatmap = dynamic(
+  () => import('@/src/components/canvas/SyncCommitteeHeatmap').then((m) => m.SyncCommitteeHeatmap),
+  { ssr: false, loading: () => <ChartSkeleton height={200} /> },
+)
+
+const DelayHistogram = dynamic(
+  () => import('@/src/components/canvas/DelayHistogram').then((m) => m.DelayHistogram),
+  { ssr: false, loading: () => <ChartSkeleton height={160} /> },
+)
 
 type TabKey = 'overview' | 'sync-committee' | 'attestation'
 

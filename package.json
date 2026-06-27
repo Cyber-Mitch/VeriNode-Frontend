@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint",
     "lint:colors": "eslint . --ext .ts,.tsx",
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
+    "@next/bundle-analyzer": "16.1.6",
     "@playwright/test": "^1.52.0",
     "@stellar/stellar-sdk": "^16.0.1",
     "@tailwindcss/postcss": "^4",

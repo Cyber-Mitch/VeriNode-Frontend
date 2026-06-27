@@ -4,8 +4,17 @@ import { useEffect } from 'react'
 import { InspectionForm } from '@/src/components/inspections/InspectionForm'
 import { SyncStatusBar } from '@/src/components/SyncStatusBar'
 import { ThemeSwitcher } from '@/src/components/ui/ThemeSwitcher'
-import { FinalityHealthGauge } from '@/src/components/validators/FinalityHealthGauge'
-import { DVTClusterList } from '@/src/components/validators/DVTClusterList'
+import dynamic from 'next/dynamic'
+import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton'
+
+const FinalityHealthGauge = dynamic(
+  () => import('@/src/components/validators/FinalityHealthGauge').then((m) => m.FinalityHealthGauge),
+  { ssr: false, loading: () => <ChartSkeleton height={120} /> },
+)
+const DVTClusterList = dynamic(
+  () => import('@/src/components/validators/DVTClusterList').then((m) => m.DVTClusterList),
+  { ssr: false, loading: () => <ChartSkeleton height={80} /> },
+)
 import { useFinalityCheckpoints } from '@/src/hooks/useFinalityCheckpoints'
 import { syncManager } from '@/src/services/syncManager'
 import { initializeEncryption, hasEncryptionKey } from '@/src/services/crypto'

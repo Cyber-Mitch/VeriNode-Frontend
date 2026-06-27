@@ -3,7 +3,13 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { LightClientSyncIndicator } from '@/src/components/network/LightClientSyncIndicator';
-import { NetworkGraph } from '@/src/components/network/NetworkGraph';
+import dynamic from 'next/dynamic';
+import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton';
+
+const NetworkGraph = dynamic(
+  () => import('@/src/components/network/NetworkGraph').then((m) => m.NetworkGraph),
+  { ssr: false, loading: () => <ChartSkeleton height={320} /> },
+);
 import { NodeList } from '@/src/components/network/NodeList';
 import type { NetworkNode } from '@/src/types/node';
 
