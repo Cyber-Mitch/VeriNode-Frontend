@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useSorobanStaking } from '@/src/hooks/useSorobanStaking';
 import { useToast } from '@/src/components/Toast';
+import { DegradableFeature } from '@/src/components/DegradableFeature';
 
 export default function Home() {
   const [txXDR, setTxXDR] = useState('');
@@ -18,6 +19,7 @@ export default function Home() {
   return (
     <div className="flex min-h-screen flex-col items-center bg-zinc-50 p-4 font-sans dark:bg-black">
       <main className="flex w-full max-w-lg flex-col gap-6 rounded-xl bg-white p-8 shadow-sm dark:bg-zinc-900">
+        <DegradableFeature feature="staking">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
             Submit Stake
@@ -62,6 +64,7 @@ export default function Home() {
             {error}
           </div>
         )}
+        </DegradableFeature>
       </main>
     </div>
   );

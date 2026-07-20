@@ -4,6 +4,9 @@ import "./globals.css";
 import { ToastProvider } from "@/src/components/Toast";
 import { RetryWatcher } from "@/src/components/RetryWatcher";
 import { PendingTransactionsBanner } from "@/src/components/PendingTransactionsBanner";
+import { FeatureFlagProvider } from "@/src/components/FeatureFlagProvider";
+import { CapacitySheddingProvider } from "@/src/components/CapacitySheddingProvider";
+import { CapacityIndicator } from "@/src/components/CapacityIndicator";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -30,11 +33,16 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ToastProvider>
-          <PendingTransactionsBanner />
-          <RetryWatcher />
-          {children}
-        </ToastProvider>
+        <FeatureFlagProvider>
+          <CapacitySheddingProvider>
+            <ToastProvider>
+              <CapacityIndicator />
+              <PendingTransactionsBanner />
+              <RetryWatcher />
+              {children}
+            </ToastProvider>
+          </CapacitySheddingProvider>
+        </FeatureFlagProvider>
       </body>
     </html>
   );
