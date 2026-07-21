@@ -35,6 +35,8 @@ export function useSorobanStaking(onToast?: (message: string, type: 'info' | 'su
             queue.updateEntry(entry.txHash, { status: 'confirmed' });
             onToastRef.current?.('Transaction confirmed', 'success');
             setTimeout(() => queue.removeEntry(entry.txHash!), CONFIRMED_REMOVAL_DELAY_MS);
+          } else if (result.status === 'pending') {
+            queue.updateEntry(entry.txHash, { status: 'pending', txHash: result.txHash });
           } else if (result.status === 'error' && result.code === 'tx_bad_seq') {
             queue.updateEntry(entry.txHash, { status: 'confirmed' });
             onToastRef.current?.('Transaction already submitted and confirmed', 'success');
@@ -58,6 +60,8 @@ export function useSorobanStaking(onToast?: (message: string, type: 'info' | 'su
             queue.updateEntry(hash, { status: 'confirmed' });
             onToastRef.current?.('Transaction confirmed', 'success');
             setTimeout(() => queue.removeEntry(hash), CONFIRMED_REMOVAL_DELAY_MS);
+          } else if (result.status === 'pending') {
+            queue.updateEntry(hash, { status: 'pending', txHash: result.txHash });
           } else if (result.status === 'network_error') {
             const retryCount = entry.retryCount + 1;
             const nextRetryAt = Date.now() + computeBackoff(retryCount);
@@ -101,6 +105,11 @@ export function useSorobanStaking(onToast?: (message: string, type: 'info' | 'su
         setState('confirmed');
         onToastRef.current?.('Transaction confirmed', 'success');
         setTimeout(() => queue.removeEntry(computedHash), CONFIRMED_REMOVAL_DELAY_MS);
+      } else if (result.status === 'pending') {
+        queue.updateEntry(computedHash, { txHash: result.txHash, status: 'pending' });
+        setTxHash(result.txHash);
+        setState('submitting');
+        onToastRef.current?.('Transaction submitted — awaiting confirmation', 'info');
       } else if (result.status === 'error') {
         if (result.code === 'tx_bad_seq') {
           queue.updateEntry(computedHash, { status: 'confirmed' });

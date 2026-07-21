@@ -78,7 +78,7 @@ export function useTxRetryQueue(): TxRetryQueue {
 
   const updateEntry = useCallback((txHash: string, updates: Partial<TxQueueEntry>) => {
     const updated = entriesRef.current.map(e =>
-      e.txHash === txHash ? { ...e, ...updates } : e
+      e.txHash === txHash || (!e.txHash && 'txHash' in updates && updates.txHash === txHash) ? { ...e, ...updates } : e
     );
     persist(updated);
   }, [persist]);

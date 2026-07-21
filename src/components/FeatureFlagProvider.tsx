@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import type { FeatureFlag, FeatureFlagState, FeatureFlagOverride } from '@/src/lib/feature-flags';
 import { computeFeatureFlags, persistOverrides, getStoredOverrides } from '@/src/lib/feature-flags';
 
@@ -29,12 +29,14 @@ export function useFeatureFlag(flag: FeatureFlag): boolean {
 export function FeatureFlagProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<FeatureFlagOverride>(() => getStoredOverrides());
   const [flags, setFlags] = useState<FeatureFlagState>(() => computeFeatureFlags());
+  const overridesRef = useRef(overrides);
+  overridesRef.current = overrides;
 
   useEffect(() => {
-    const onPopState = () => setFlags(computeFeatureFlags(overrides));
+    const onPopState = () => setFlags(computeFeatureFlags(overridesRef.current));
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
-  }, [overrides]);
+  }, []);
 
   const setOverride = useCallback((flag: FeatureFlag, value: boolean) => {
     setOverrides(prev => {
