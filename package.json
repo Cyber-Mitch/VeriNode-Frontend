@@ -7,7 +7,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "perf:benchmark": "playwright test tests/performance/ --reporter=list",
+    "perf:compare": "tsx tests/performance/compare-baseline.ts tests/performance/current-metrics.json",
+    "perf:update-baseline": "PERF_UPDATE_BASELINE=true tsx tests/performance/compare-baseline.ts tests/performance/current-metrics.json"
   },
   "dependencies": {
     "next": "16.1.6",
@@ -15,6 +18,7 @@
     "react-dom": "19.2.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -22,6 +26,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.19.0",
     "typescript": "^5"
   }
 }
