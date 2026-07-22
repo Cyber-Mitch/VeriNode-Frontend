@@ -49,36 +49,64 @@ export interface UseSorobanStakingReturn {
   balance: number | null;
 }
 
-/** Log a failed staking operation to Sentry for traceability. */
-async function logFailure(optimisticTxId: string, action: StakingAction, reason: string) {
-  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_SENTRY_DSN) {
-    try {
-      // @sentry/nextjs is an optional runtime dependency; the @vite-ignore
-      // keeps the bundler from trying to resolve it at build/test time.
-      const sentryModule = '@sentry/nextjs';
-      const { captureEvent } = await import(/* @vite-ignore */ sentryModule);
-      captureEvent({
-        message: 'Optimistic staking transaction failed',
-        level: 'error',
-        tags: { action },
-        extra: { optimisticTxId, action, reason },
-      });
-    } catch {
-      console.warn('[Sentry] staking failure', { optimisticTxId, action, reason });
-    }
-  } else {
-    console.info('[Sentry audit] staking failure', { optimisticTxId, action, reason });
-  }
-}
+export function useSorobanStaking(onToast?: (message: string, type: 'info' | 'success' | 'error') => void): UseSorobanStakingReturn {
+  const [state, setState] = useState<SubmitState>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const queue = useTxRetryQueue();
+  const onToastRef = useRef(onToast);
+  useEffect(() => {
+    onToastRef.current = onToast;
+  }, [onToast]);
 
-/** Poll the RPC until the transaction confirms, or reject after the finality budget. */
-async function awaitConfirmation(txHash: string): Promise<void> {
-  const deadline = Date.now() + CONFIRM_TIMEOUT_MS;
-  for (;;) {
-    const result = await getTransactionStatus(txHash);
-    if (result?.status === 'confirmed') return;
-    if (Date.now() >= deadline) {
-      throw new StakingSubmitError('Confirmation timed out', 'timeout');
+  const recoverFromRefresh = useCallback(async () => {
+    const pending = queue.getPendingEntries();
+    for (const entry of pending) {
+      if (entry.retryCount < MAX_RETRY_ATTEMPTS && entry.txHash) {
+        try {
+          const result = await rpcSendTransaction(entry.txXDR);
+          if (result.status === 'confirmed') {
+            queue.updateEntry(entry.txHash, { status: 'confirmed' });
+            onToastRef.current?.('Transaction confirmed', 'success');
+            setTimeout(() => queue.removeEntry(entry.txHash!), CONFIRMED_REMOVAL_DELAY_MS);
+          } else if (result.status === 'pending') {
+            queue.updateEntry(entry.txHash, { status: 'pending', txHash: result.txHash });
+          } else if (result.status === 'error' && result.code === 'tx_bad_seq') {
+            queue.updateEntry(entry.txHash, { status: 'confirmed' });
+            onToastRef.current?.('Transaction already submitted and confirmed', 'success');
+            setTimeout(() => queue.removeEntry(entry.txHash!), CONFIRMED_REMOVAL_DELAY_MS);
+          } else if (result.status === 'network_error') {
+            const retryCount = entry.retryCount + 1;
+            const nextRetryAt = Date.now() + computeBackoff(retryCount);
+            queue.updateEntry(entry.txHash, { retryCount, nextRetryAt });
+          }
+        } catch {
+          const retryCount = entry.retryCount + 1;
+          const nextRetryAt = Date.now() + computeBackoff(retryCount);
+          queue.updateEntry(entry.txHash, { retryCount, nextRetryAt });
+        }
+      } else if (entry.retryCount < MAX_RETRY_ATTEMPTS && !entry.txHash) {
+        const hash = await sha256(entry.txXDR);
+        queue.updateEntry(hash, { txHash: hash });
+        try {
+          const result = await rpcSendTransaction(entry.txXDR);
+          if (result.status === 'confirmed') {
+            queue.updateEntry(hash, { status: 'confirmed' });
+            onToastRef.current?.('Transaction confirmed', 'success');
+            setTimeout(() => queue.removeEntry(hash), CONFIRMED_REMOVAL_DELAY_MS);
+          } else if (result.status === 'pending') {
+            queue.updateEntry(hash, { status: 'pending', txHash: result.txHash });
+          } else if (result.status === 'network_error') {
+            const retryCount = entry.retryCount + 1;
+            const nextRetryAt = Date.now() + computeBackoff(retryCount);
+            queue.updateEntry(hash, { retryCount, nextRetryAt });
+          }
+        } catch {
+          const retryCount = entry.retryCount + 1;
+          const nextRetryAt = Date.now() + computeBackoff(retryCount);
+          queue.updateEntry(hash, { retryCount, nextRetryAt });
+        }
+      }
     }
     await new Promise((r) => setTimeout(r, CONFIRM_POLL_INTERVAL_MS));
   }
@@ -116,24 +144,40 @@ export function useSorobanStaking(onToast?: Toast): UseSorobanStakingReturn {
         const { transactionHash } = await staking.submit(action, { amount, source });
         attachHash(optimisticTxId, transactionHash);
 
-        // Listen for finality.
-        await awaitConfirmation(transactionHash);
+    try {
+      const result = await rpcSendTransaction(txXDR);
 
-        confirm(optimisticTxId);
-        onToast?.(`${labelFor(action)} confirmed`, 'success');
-        setTimeout(() => removePending(optimisticTxId), SETTLED_REMOVAL_DELAY_MS);
-      } catch (err: unknown) {
-        const reason =
-          err instanceof StakingSubmitError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : 'Unknown error';
-        // Roll the balance back and surface the failure.
-        fail(optimisticTxId, reason);
-        onToast?.(`${labelFor(action)} failed: ${reason}`, 'error');
-        void logFailure(optimisticTxId, action, reason);
-        setTimeout(() => removePending(optimisticTxId), SETTLED_REMOVAL_DELAY_MS);
+      if (result.status === 'confirmed') {
+        queue.updateEntry(computedHash, { status: 'confirmed' });
+        setTxHash(result.txHash);
+        setState('confirmed');
+        onToastRef.current?.('Transaction confirmed', 'success');
+        setTimeout(() => queue.removeEntry(computedHash), CONFIRMED_REMOVAL_DELAY_MS);
+      } else if (result.status === 'pending') {
+        queue.updateEntry(computedHash, { txHash: result.txHash, status: 'pending' });
+        setTxHash(result.txHash);
+        setState('submitting');
+        onToastRef.current?.('Transaction submitted — awaiting confirmation', 'info');
+      } else if (result.status === 'error') {
+        if (result.code === 'tx_bad_seq') {
+          queue.updateEntry(computedHash, { status: 'confirmed' });
+          setTxHash(computedHash);
+          setState('confirmed');
+          onToastRef.current?.('Transaction already submitted and confirmed', 'success');
+          setTimeout(() => queue.removeEntry(computedHash), CONFIRMED_REMOVAL_DELAY_MS);
+        } else {
+          queue.updateEntry(computedHash, { status: 'failed' });
+          setError(result.error);
+          setState('error');
+          onToastRef.current?.(result.error, 'error');
+        }
+      } else if (result.status === 'network_error') {
+        const retryCount = entry.retryCount + 1;
+        const nextRetryAt = Date.now() + computeBackoff(retryCount);
+        queue.updateEntry(computedHash, { retryCount, nextRetryAt, status: 'pending' });
+        setError(result.error);
+        setState('error');
+        onToastRef.current?.(`Network error — will retry (attempt ${retryCount}/${MAX_RETRY_ATTEMPTS})`, 'error');
       }
     },
     [source, beginOptimistic, attachHash, confirm, fail, removePending, onToast]

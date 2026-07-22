@@ -3,6 +3,12 @@ import { Inter } from "next/font/google";
 import { Providers } from "@/src/components/providers/Providers";
 import { PwaProvider } from "@/src/components/providers/PwaProvider";
 import "./globals.css";
+import { ToastProvider } from "@/src/components/Toast";
+import { RetryWatcher } from "@/src/components/RetryWatcher";
+import { PendingTransactionsBanner } from "@/src/components/PendingTransactionsBanner";
+import { FeatureFlagProvider } from "@/src/components/FeatureFlagProvider";
+import { CapacitySheddingProvider } from "@/src/components/CapacitySheddingProvider";
+import { CapacityIndicator } from "@/src/components/CapacityIndicator";
 
 // next/font self-hosts Inter and emits <link rel="preload"> automatically.
 const inter = Inter({
@@ -22,18 +28,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={inter.variable}>
-      <head>
-        <link rel="manifest" href="/manifest.json" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-        {/* Preload the framework runtime so it's fetched in parallel with HTML parse */}
-        <link rel="modulepreload" href="/_next/static/chunks/webpack.js" />
-      </head>
-      <body className={`antialiased ${inter.className}`}>
-        <Providers>
-          <PwaProvider>{children}</PwaProvider>
-        </Providers>
+    <html lang="en">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
+        <FeatureFlagProvider>
+          <CapacitySheddingProvider>
+            <ToastProvider>
+              <CapacityIndicator />
+              <PendingTransactionsBanner />
+              <RetryWatcher />
+              {children}
+            </ToastProvider>
+          </CapacitySheddingProvider>
+        </FeatureFlagProvider>
       </body>
     </html>
   );

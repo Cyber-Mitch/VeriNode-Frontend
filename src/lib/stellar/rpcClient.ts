@@ -1,5 +1,6 @@
 export type SendTransactionResult =
   | { status: 'confirmed'; txHash: string }
+  | { status: 'pending'; txHash: string }
   | { status: 'error'; error: string; code?: string }
   | { status: 'network_error'; error: string };
 
@@ -57,6 +58,16 @@ export async function sendTransaction(txXDR: string): Promise<SendTransactionRes
     }
 
     const txHash: string = data.result?.hash || '';
+    const txStatus: string = data.result?.status || '';
+
+    if (txStatus === 'ERROR') {
+      return { status: 'error', error: data.result?.errorResult?.message || 'Transaction error', code: 'tx_failed' };
+    }
+
+    if (txStatus === 'PENDING') {
+      return { status: 'pending', txHash };
+    }
+
     return { status: 'confirmed', txHash };
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {

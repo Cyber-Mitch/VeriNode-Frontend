@@ -48,6 +48,11 @@ export function RetryWatcher() {
               return { ...entry, status: 'confirmed' as const, retryCount: entry.retryCount + 1 };
             }
 
+            if (result.status === 'pending') {
+              changed = true;
+              return { ...entry, txHash: result.txHash, status: 'pending' as const, nextRetryAt: Date.now() + 5000 };
+            }
+
             if (result.status === 'error' && result.code === 'tx_bad_seq') {
               changed = true;
               showToast('Transaction already submitted and confirmed', 'success');

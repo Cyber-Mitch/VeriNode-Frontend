@@ -1,32 +1,9 @@
 'use client'
 
-import { useEffect } from 'react'
-import { InspectionForm } from '@/src/components/inspections/InspectionForm'
-import { SyncStatusBar } from '@/src/components/SyncStatusBar'
-import { ThemeSwitcher } from '@/src/components/ui/ThemeSwitcher'
-import dynamic from 'next/dynamic'
-import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton'
-
-const FinalityHealthGauge = dynamic(
-  () => import('@/src/components/validators/FinalityHealthGauge').then((m) => m.FinalityHealthGauge),
-  { ssr: false, loading: () => <ChartSkeleton height={120} /> },
-)
-const DVTClusterList = dynamic(
-  () => import('@/src/components/validators/DVTClusterList').then((m) => m.DVTClusterList),
-  { ssr: false, loading: () => <ChartSkeleton height={80} /> },
-)
-import { useFinalityCheckpoints } from '@/src/hooks/useFinalityCheckpoints'
-import { syncManager } from '@/src/services/syncManager'
-import { initializeEncryption, hasEncryptionKey } from '@/src/services/crypto'
-
-const inspectionFields = [
-  { label: 'Rack / Location', key: 'location', type: 'text' as const, required: true },
-  { label: 'Equipment Type', key: 'equipmentType', type: 'select' as const, options: ['Server', 'Switch', 'Router', 'UPS', 'Cooling Unit', 'PDU'], required: true },
-  { label: 'Status', key: 'status', type: 'select' as const, options: ['Operational', 'Warning', 'Critical', 'Offline'], required: true },
-  { label: 'Temperature (°C)', key: 'temperature', type: 'number' as const },
-  { label: 'Observations', key: 'observations', type: 'textarea' as const },
-  { label: 'Inspector Name', key: 'inspector', type: 'text' as const },
-]
+import { useState } from 'react';
+import { useSorobanStaking } from '@/src/hooks/useSorobanStaking';
+import { useToast } from '@/src/components/Toast';
+import { DegradableFeature } from '@/src/components/DegradableFeature';
 
 export default function Home() {
   const finalityHealth = useFinalityCheckpoints()
@@ -40,14 +17,17 @@ export default function Home() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-zinc-50 pb-12 dark:bg-black">
-      <main className="mx-auto max-w-2xl px-4 py-8">
-        <h1 className="mb-2 text-2xl font-bold text-zinc-900 dark:text-zinc-50">
-          Inspection Form
-        </h1>
-        <p className="mb-8 text-sm text-zinc-500 dark:text-zinc-400">
-          Physical node inspection — data is cached locally and synced when online.
-        </p>
+    <div className="flex min-h-screen flex-col items-center bg-zinc-50 p-4 font-sans dark:bg-black">
+      <main className="flex w-full max-w-lg flex-col gap-6 rounded-xl bg-white p-8 shadow-sm dark:bg-zinc-900">
+        <DegradableFeature feature="staking">
+        <div>
+          <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-50">
+            Submit Stake
+          </h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            Submit your staking transaction to the Soroban network
+          </p>
+        </div>
 
         <div className="mb-6">
           <ThemeSwitcher />
@@ -61,9 +41,12 @@ export default function Home() {
           <DVTClusterList />
         </div>
 
-        <div className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <InspectionForm fields={inspectionFields} />
-        </div>
+        {state === 'error' && error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            {error}
+          </div>
+        )}
+        </DegradableFeature>
       </main>
 
       <SyncStatusBar />
