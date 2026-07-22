@@ -4,6 +4,7 @@ import React from 'react';
 import { QueryProvider } from '@/src/components/providers/QueryProvider';
 import { WalletProvider } from '@/src/components/providers/WalletProvider';
 import { ThemeProvider } from '@/src/components/providers/ThemeProvider';
+import { DatabaseHealthProvider } from '@/src/components/providers/DatabaseHealthProvider';
 import { useAuthStore } from '@/src/store/authStore';
 import { useStakingStore } from '@/src/store/stakingStore';
 
@@ -25,9 +26,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider>
       <QueryProvider>
         <WalletProvider>
-          <TestStoreExposer>
-            {children}
-          </TestStoreExposer>
+          <DatabaseHealthProvider>
+            <TestStoreExposer>
+              {children}
+            </TestStoreExposer>
+          </DatabaseHealthProvider>
         </WalletProvider>
       </QueryProvider>
     </ThemeProvider>

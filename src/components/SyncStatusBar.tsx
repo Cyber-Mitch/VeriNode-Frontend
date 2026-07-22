@@ -1,6 +1,7 @@
 'use client'
 
 import { useSyncStore } from '@/src/stores/syncStore'
+import { DatabaseHealthBar } from '@/src/components/common/DatabaseHealthBar'
 
 export function SyncStatusBar() {
   const isOnline = useSyncStore((s) => s.isOnline)
@@ -10,7 +11,7 @@ export function SyncStatusBar() {
   const lastSync = useSyncStore((s) => s.lastSync)
 
   return (
-    <div className="fixed bottom-0 left-0 right-z-50 flex h-10 items-center justify-between border-t bg-white px-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+    <div className="fixed bottom-0 left-0 right-0 z-50 flex h-10 items-center justify-between border-t bg-white px-4 text-sm dark:border-zinc-700 dark:bg-zinc-900">
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1.5">
           <span
@@ -46,6 +47,7 @@ export function SyncStatusBar() {
             Last sync: {new Date(lastSync).toLocaleTimeString()}
           </span>
         )}
+        <DatabaseHealthBar />
       </div>
     </div>
   )
