@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton'
 import { SyncCommitteeSummary } from '@/src/components/validators/SyncCommitteeSummary'
 import { EpochRangeSelector } from '@/src/components/validators/EpochRangeSelector'
+import { ExitWorkflowWizard } from '@/src/components/validators/ExitWorkflowWizard'
 import { useSyncCommitteeHistory } from '@/src/hooks/useSyncCommitteeHistory'
 import { useAttestationInclusion, MIN_SPAN } from '@/src/hooks/useAttestationInclusion'
 
@@ -39,6 +40,7 @@ export function ValidatorDetail({
   beaconNodeUrl?: string
 }) {
   const [tab, setTab] = useState<TabKey>('sync-committee')
+  const [showExitWizard, setShowExitWizard] = useState(false)
   const history = useSyncCommitteeHistory(validatorIndex, { beaconNodeUrl })
   const { periods, currentPeriod, loadPeriod } = history
 
@@ -65,6 +67,40 @@ export function ValidatorDetail({
 
   return (
     <div className="space-y-6">
+      {/* Actions toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-900/60 px-5 py-3">
+        <p className="text-sm font-medium text-slate-300">
+          Validator <span className="font-mono text-sky-300">#{validatorIndex}</span>
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowExitWizard(true)}
+          className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-500/20"
+          aria-label={`Initiate voluntary exit for validator ${validatorIndex}`}
+        >
+          ⚠ Voluntary Exit
+        </button>
+      </div>
+
+      {/* Exit wizard (modal-style overlay) */}
+      {showExitWizard && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Voluntary exit workflow"
+        >
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl">
+            <ExitWorkflowWizard
+              defaultValidatorIndex={validatorIndex}
+              beaconNodeUrl={beaconNodeUrl}
+              onComplete={() => setShowExitWizard(false)}
+              onClose={() => setShowExitWizard(false)}
+            />
+          </div>
+        </div>
+      )}
+
       <nav className="flex gap-1 border-b border-white/10">
         {TABS.map(({ key, label }) => (
           <button
