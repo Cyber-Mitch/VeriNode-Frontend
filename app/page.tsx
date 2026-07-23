@@ -1,25 +1,8 @@
 'use client'
 
-import { useEffect } from 'react';
 import { DegradableFeature } from '@/src/components/DegradableFeature';
-import { ThemeSwitcher } from '@/src/components/ui/ThemeSwitcher';
-import { FinalityHealthGauge } from '@/src/components/validators/FinalityHealthGauge';
-import { DVTClusterList } from '@/src/components/validators/DVTClusterList';
-import { SyncStatusBar } from '@/src/components/SyncStatusBar';
-import { useFinalityCheckpoints } from '@/src/hooks/useFinalityCheckpoints';
-import { hasEncryptionKey, initializeEncryption } from '@/src/lib/crypto';
-import { syncManager } from '@/src/services/syncManager';
 
 export default function Home() {
-  const finalityHealth = useFinalityCheckpoints()
-
-  useEffect(() => {
-    if (!hasEncryptionKey()) {
-      initializeEncryption('default-pin-0000').catch(console.error)
-    }
-    syncManager.start()
-    return () => syncManager.stop()
-  }, [])
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-zinc-50 p-4 font-sans dark:bg-black">
