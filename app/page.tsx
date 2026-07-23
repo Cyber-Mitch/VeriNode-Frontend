@@ -1,9 +1,14 @@
 'use client'
 
-import { useState } from 'react';
-import { useSorobanStaking } from '@/src/hooks/useSorobanStaking';
-import { useToast } from '@/src/components/Toast';
+import { useEffect } from 'react';
 import { DegradableFeature } from '@/src/components/DegradableFeature';
+import { ThemeSwitcher } from '@/src/components/ui/ThemeSwitcher';
+import { FinalityHealthGauge } from '@/src/components/validators/FinalityHealthGauge';
+import { DVTClusterList } from '@/src/components/validators/DVTClusterList';
+import { SyncStatusBar } from '@/src/components/SyncStatusBar';
+import { useFinalityCheckpoints } from '@/src/hooks/useFinalityCheckpoints';
+import { hasEncryptionKey, initializeEncryption } from '@/src/lib/crypto';
+import { syncManager } from '@/src/services/syncManager';
 
 export default function Home() {
   const finalityHealth = useFinalityCheckpoints()

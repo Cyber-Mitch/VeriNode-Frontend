@@ -24,12 +24,12 @@ describe('useSlashingStream', () => {
 
     // Create mock WebSocket server
     wsServer = new MockWebSocketServer()
-    ;(global as any).WebSocket = wsServer.ClientConstructor
+    ;(global as unknown as Record<string, unknown>).WebSocket = wsServer.ClientConstructor
   })
 
   afterEach(() => {
     // Restore original WebSocket
-    ;(global as any).WebSocket = originalWebSocket
+    ;(global as unknown as Record<string, unknown>).WebSocket = originalWebSocket
     wsServer.cleanup()
     vi.clearAllMocks()
   })

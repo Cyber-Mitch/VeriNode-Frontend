@@ -199,9 +199,14 @@ export function useVirtualizer(options: UseVirtualizerOptions): VirtualizerResul
     if (el) elementIndexMap.current.set(el, index)
   }, [])
 
-  // Expose attachIndex on the measureElement function for TierRow usage.
-  ;(measureElement as typeof measureElement & { attachIndex: typeof attachIndex }).attachIndex =
-    attachIndex
+  const measureElementWithAttachIndex = useCallback(
+    ((el: Element | null, index: number) => {
+      if (el) elementIndexMap.current.set(el, index)
+      measureElement(el)
+    }) as typeof measureElement & { attachIndex: typeof attachIndex },
+    [measureElement],
+  )
+  measureElementWithAttachIndex.attachIndex = attachIndex
 
-  return { getVirtualItems, getTotalSize, measureElement }
+  return { getVirtualItems, getTotalSize, measureElement: measureElementWithAttachIndex }
 }

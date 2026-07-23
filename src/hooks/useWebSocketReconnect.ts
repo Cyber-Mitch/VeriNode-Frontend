@@ -116,7 +116,7 @@ export function useWebSocketReconnect({
         if (!closedRef.current) {
           reconnectAttemptsRef.current += 1
           const delay = Math.min(reconnectDelayMs * Math.pow(2, reconnectAttemptsRef.current - 1), 30000)
-          reconnectTimerRef.current = setTimeout(connect, delay)
+          connectRef.current()
         }
       }
 
@@ -127,6 +127,9 @@ export function useWebSocketReconnect({
       handleError(`WebSocket connection failed: ${err}`)
     }
   }, [url, enabled, reconnectDelayMs, maxReconnectAttempts, onMessage, onConnected, onDisconnected, handleError])
+
+  const connectRef = useRef(connect)
+  connectRef.current = connect
 
   // Initialize connection
   const setupRef = useRef(false)

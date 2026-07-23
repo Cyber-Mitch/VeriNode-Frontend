@@ -94,14 +94,11 @@ export default function DelegationDetailPanel({
 
     if (historyEdges.length === 0) return null;
 
-    let cumulative = 0;
-    const points = historyEdges.map((e) => {
-      cumulative += e.amount;
-      return {
-        timestamp: e.timestamp,
-        value: cumulative
-      };
-    });
+    const points = historyEdges.reduce<{ timestamp: number; value: number }[]>((acc, e) => {
+      const prev = acc.length > 0 ? acc[acc.length - 1].value : 0;
+      acc.push({ timestamp: e.timestamp, value: prev + e.amount });
+      return acc;
+    }, []);
 
     const timestamps = points.map((p) => p.timestamp);
     const values = points.map((p) => p.value);
