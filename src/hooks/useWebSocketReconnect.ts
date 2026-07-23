@@ -129,7 +129,7 @@ export function useWebSocketReconnect({
   }, [url, enabled, reconnectDelayMs, maxReconnectAttempts, onMessage, onConnected, onDisconnected, handleError])
 
   const connectRef = useRef(connect)
-  connectRef.current = connect
+  useEffect(() => { connectRef.current = connect }, [connect])
 
   // Initialize connection
   const setupRef = useRef(false)

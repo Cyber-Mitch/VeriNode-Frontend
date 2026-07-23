@@ -199,14 +199,13 @@ export function useVirtualizer(options: UseVirtualizerOptions): VirtualizerResul
     if (el) elementIndexMap.current.set(el, index)
   }, [])
 
-  const measureElementWithAttachIndex = useCallback(
-    ((el: Element | null, index: number) => {
+  const measureElementWrapper = useCallback(
+    (el: Element | null, index: number) => {
       if (el) elementIndexMap.current.set(el, index)
       measureElement(el)
-    }) as typeof measureElement & { attachIndex: typeof attachIndex },
+    },
     [measureElement],
   )
-  measureElementWithAttachIndex.attachIndex = attachIndex
 
-  return { getVirtualItems, getTotalSize, measureElement: measureElementWithAttachIndex }
+  return { getVirtualItems, getTotalSize, measureElement: measureElementWrapper, attachIndex }
 }
