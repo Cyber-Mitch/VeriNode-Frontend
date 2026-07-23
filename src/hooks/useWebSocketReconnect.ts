@@ -129,7 +129,8 @@ export function useWebSocketReconnect({
   }, [url, enabled, reconnectDelayMs, maxReconnectAttempts, onMessage, onConnected, onDisconnected, handleError])
 
   const connectRef = useRef(connect)
-  useEffect(() => { /* eslint-disable-next-line react-hooks/immutability */ connectRef.current = connect }, [connect])
+  // eslint-disable-next-line react-hooks/immutability
+  useEffect(() => { connectRef.current = connect }, [connect])
 
   // Initialize connection
   const setupRef = useRef(false)
