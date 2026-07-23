@@ -81,6 +81,7 @@ export function useVirtualizer(options: UseVirtualizerOptions): VirtualizerResul
   // Ensure cache is built on mount and when count changes.
   useEffect(() => {
     rebuildPositionCache()
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     forceUpdate((n) => n + 1)
   }, [count, rebuildPositionCache])
 
