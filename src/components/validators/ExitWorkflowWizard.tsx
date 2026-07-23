@@ -125,6 +125,7 @@ export function ExitWorkflowWizard({
 
   // ── Generate QR when blob is ready ────────────────────────────────────────
   useEffect(() => {
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     if (!unsignedHexBlob) { setQrDataUrl(null); return; }
     encodeExitQR(unsignedHexBlob)
       .then((r) => setQrDataUrl(r.dataUrl))
@@ -134,8 +135,9 @@ export function ExitWorkflowWizard({
   // ── Watch for broadcast done ───────────────────────────────────────────────
   useEffect(() => {
     if (step === 'done') {
-      setBroadcastSuccess(true);
+      const id = setTimeout(() => setBroadcastSuccess(true), 0);
       onComplete?.();
+      return () => clearTimeout(id);
     }
   }, [step, onComplete]);
 

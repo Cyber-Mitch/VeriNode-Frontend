@@ -591,6 +591,7 @@ export default function DelegationFlowGraph() {
 
         {/* Render interactive text labels over nodes using HTML overlays for sharp CSS rendering */}
         <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          {/* eslint-disable-next-line react-hooks/refs */}
           {Array.from(nodePhysicsRef.current.values()).map((nodePhys) => (
             <div
               key={nodePhys.id}

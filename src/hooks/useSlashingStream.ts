@@ -46,11 +46,7 @@ export function useSlashingStream({
 }: UseSlashingStreamOptions): UseSlashingStreamResult {
   const [events, setEvents] = useState<SlashingEvent[]>([])
   const [error, setError] = useState<string | null>(null)
-
-  // Map to track received event IDs with timestamps for deduplication
-  const receivedIdsRef = useRef<Map<string, ReceivedEventEntry>>(new Map())
-  const cleanupTimerRef = useRef<NodeJS.Timeout | undefined>()
-  const lastEventIdRef = useRef<string | null>(null)
+  const [lastEventId, setLastEventId] = useState<string | null>(null)
 
   // Clean up expired event IDs based on TTL
   const cleanupExpiredIds = useCallback(() => {
@@ -91,7 +87,7 @@ export function useSlashingStream({
 
         // Mark as received and add to feed
         markAsReceived(data.id)
-        lastEventIdRef.current = data.id
+        setLastEventId(data.id)
 
         setEvents((prevEvents) => {
           // Double-check: ensure event is not already in the list
@@ -153,6 +149,6 @@ export function useSlashingStream({
     events,
     connected,
     error,
-    lastEventId: lastEventIdRef.current,
+    lastEventId,
   }
 }

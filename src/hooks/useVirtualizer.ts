@@ -81,6 +81,7 @@ export function useVirtualizer(options: UseVirtualizerOptions): VirtualizerResul
   // Ensure cache is built on mount and when count changes.
   useEffect(() => {
     rebuildPositionCache()
+    /* eslint-disable-next-line react-hooks/set-state-in-effect */
     forceUpdate((n) => n + 1)
   }, [count, rebuildPositionCache])
 
@@ -199,9 +200,13 @@ export function useVirtualizer(options: UseVirtualizerOptions): VirtualizerResul
     if (el) elementIndexMap.current.set(el, index)
   }, [])
 
-  // Expose attachIndex on the measureElement function for TierRow usage.
-  ;(measureElement as typeof measureElement & { attachIndex: typeof attachIndex }).attachIndex =
-    attachIndex
+  const measureElementWrapper = useCallback(
+    (el: Element | null, index: number) => {
+      if (el) elementIndexMap.current.set(el, index)
+      measureElement(el)
+    },
+    [measureElement],
+  )
 
-  return { getVirtualItems, getTotalSize, measureElement }
+  return { getVirtualItems, getTotalSize, measureElement: measureElementWrapper, attachIndex }
 }

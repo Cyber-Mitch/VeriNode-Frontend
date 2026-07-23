@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-07-21T00:00:00.000Z",
+  "commit": "initial-baseline",
+  "metrics": {
+    "fcp": 800,
+    "lcp": 1500,
+    "tti": 1200,
+    "domContentLoaded": 600,
+    "pageLoadTime": 2000,
+    "jsHeapUsed": 8000000,
+    "jsHeapTotal": 16000000,
+    "numRequests": 15,
+    "totalBytes": 250000
+  }
+}

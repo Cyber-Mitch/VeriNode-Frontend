@@ -49,69 +49,6 @@ export interface UseSorobanStakingReturn {
   balance: number | null;
 }
 
-export function useSorobanStaking(onToast?: (message: string, type: 'info' | 'success' | 'error') => void): UseSorobanStakingReturn {
-  const [state, setState] = useState<SubmitState>('idle');
-  const [error, setError] = useState<string | null>(null);
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const queue = useTxRetryQueue();
-  const onToastRef = useRef(onToast);
-  useEffect(() => {
-    onToastRef.current = onToast;
-  }, [onToast]);
-
-  const recoverFromRefresh = useCallback(async () => {
-    const pending = queue.getPendingEntries();
-    for (const entry of pending) {
-      if (entry.retryCount < MAX_RETRY_ATTEMPTS && entry.txHash) {
-        try {
-          const result = await rpcSendTransaction(entry.txXDR);
-          if (result.status === 'confirmed') {
-            queue.updateEntry(entry.txHash, { status: 'confirmed' });
-            onToastRef.current?.('Transaction confirmed', 'success');
-            setTimeout(() => queue.removeEntry(entry.txHash!), CONFIRMED_REMOVAL_DELAY_MS);
-          } else if (result.status === 'pending') {
-            queue.updateEntry(entry.txHash, { status: 'pending', txHash: result.txHash });
-          } else if (result.status === 'error' && result.code === 'tx_bad_seq') {
-            queue.updateEntry(entry.txHash, { status: 'confirmed' });
-            onToastRef.current?.('Transaction already submitted and confirmed', 'success');
-            setTimeout(() => queue.removeEntry(entry.txHash!), CONFIRMED_REMOVAL_DELAY_MS);
-          } else if (result.status === 'network_error') {
-            const retryCount = entry.retryCount + 1;
-            const nextRetryAt = Date.now() + computeBackoff(retryCount);
-            queue.updateEntry(entry.txHash, { retryCount, nextRetryAt });
-          }
-        } catch {
-          const retryCount = entry.retryCount + 1;
-          const nextRetryAt = Date.now() + computeBackoff(retryCount);
-          queue.updateEntry(entry.txHash, { retryCount, nextRetryAt });
-        }
-      } else if (entry.retryCount < MAX_RETRY_ATTEMPTS && !entry.txHash) {
-        const hash = await sha256(entry.txXDR);
-        queue.updateEntry(hash, { txHash: hash });
-        try {
-          const result = await rpcSendTransaction(entry.txXDR);
-          if (result.status === 'confirmed') {
-            queue.updateEntry(hash, { status: 'confirmed' });
-            onToastRef.current?.('Transaction confirmed', 'success');
-            setTimeout(() => queue.removeEntry(hash), CONFIRMED_REMOVAL_DELAY_MS);
-          } else if (result.status === 'pending') {
-            queue.updateEntry(hash, { status: 'pending', txHash: result.txHash });
-          } else if (result.status === 'network_error') {
-            const retryCount = entry.retryCount + 1;
-            const nextRetryAt = Date.now() + computeBackoff(retryCount);
-            queue.updateEntry(hash, { retryCount, nextRetryAt });
-          }
-        } catch {
-          const retryCount = entry.retryCount + 1;
-          const nextRetryAt = Date.now() + computeBackoff(retryCount);
-          queue.updateEntry(hash, { retryCount, nextRetryAt });
-        }
-      }
-    }
-    await new Promise((r) => setTimeout(r, CONFIRM_POLL_INTERVAL_MS));
-  }
-}
-
 export function useSorobanStaking(onToast?: Toast): UseSorobanStakingReturn {
   const { activeAccount } = useWallet();
   const source = activeAccount?.publicKey;
@@ -143,45 +80,14 @@ export function useSorobanStaking(onToast?: Toast): UseSorobanStakingReturn {
         // (c) Submit and (d) record the optimisticTxId -> realTxHash mapping.
         const { transactionHash } = await staking.submit(action, { amount, source });
         attachHash(optimisticTxId, transactionHash);
-
-    try {
-      const result = await rpcSendTransaction(txXDR);
-
-      if (result.status === 'confirmed') {
-        queue.updateEntry(computedHash, { status: 'confirmed' });
-        setTxHash(result.txHash);
-        setState('confirmed');
-        onToastRef.current?.('Transaction confirmed', 'success');
-        setTimeout(() => queue.removeEntry(computedHash), CONFIRMED_REMOVAL_DELAY_MS);
-      } else if (result.status === 'pending') {
-        queue.updateEntry(computedHash, { txHash: result.txHash, status: 'pending' });
-        setTxHash(result.txHash);
-        setState('submitting');
-        onToastRef.current?.('Transaction submitted — awaiting confirmation', 'info');
-      } else if (result.status === 'error') {
-        if (result.code === 'tx_bad_seq') {
-          queue.updateEntry(computedHash, { status: 'confirmed' });
-          setTxHash(computedHash);
-          setState('confirmed');
-          onToastRef.current?.('Transaction already submitted and confirmed', 'success');
-          setTimeout(() => queue.removeEntry(computedHash), CONFIRMED_REMOVAL_DELAY_MS);
-        } else {
-          queue.updateEntry(computedHash, { status: 'failed' });
-          setError(result.error);
-          setState('error');
-          onToastRef.current?.(result.error, 'error');
-        }
-      } else if (result.status === 'network_error') {
-        const retryCount = entry.retryCount + 1;
-        const nextRetryAt = Date.now() + computeBackoff(retryCount);
-        queue.updateEntry(computedHash, { retryCount, nextRetryAt, status: 'pending' });
-        setError(result.error);
-        setState('error');
-        onToastRef.current?.(`Network error — will retry (attempt ${retryCount}/${MAX_RETRY_ATTEMPTS})`, 'error');
-      }
-    },
-    [source, beginOptimistic, attachHash, confirm, fail, removePending, onToast]
-  );
+      confirm(optimisticTxId);
+      onToast?.('Transaction confirmed', 'success');
+    } catch (err) {
+      const reason = err instanceof StakingSubmitError ? err.message : 'Staking failed';
+      fail(optimisticTxId, reason);
+      onToast?.(reason, 'error');
+    }
+  }, [source, beginOptimistic, attachHash, confirm, fail, removePending, onToast]);
 
   const retry = useCallback(
     async (optimisticTxId: string): Promise<void> => {

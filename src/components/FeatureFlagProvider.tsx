@@ -30,7 +30,10 @@ export function FeatureFlagProvider({ children }: { children: ReactNode }) {
   const [overrides, setOverrides] = useState<FeatureFlagOverride>(() => getStoredOverrides());
   const [flags, setFlags] = useState<FeatureFlagState>(() => computeFeatureFlags());
   const overridesRef = useRef(overrides);
-  overridesRef.current = overrides;
+
+  useEffect(() => {
+    overridesRef.current = overrides;
+  }, [overrides]);
 
   useEffect(() => {
     const onPopState = () => setFlags(computeFeatureFlags(overridesRef.current));

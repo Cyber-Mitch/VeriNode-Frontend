@@ -139,8 +139,8 @@ const generateInitialMockEdges = (): DelegationEdge[] => {
   return edges;
 };
 
-let activeMockEdges = generateInitialMockEdges();
-let activeMockDelegators = [...MOCK_DELEGATORS];
+const activeMockEdges = generateInitialMockEdges();
+const activeMockDelegators = [...MOCK_DELEGATORS];
 
 export interface GraphData {
   nodes: DelegationNode[];

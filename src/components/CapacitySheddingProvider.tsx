@@ -70,7 +70,6 @@ export function CapacitySheddingProvider({
   }, [thresholds]);
 
   useEffect(() => {
-    collectMetrics();
     intervalRef.current = setInterval(collectMetrics, intervalMs);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);

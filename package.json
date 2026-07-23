@@ -10,6 +10,9 @@
     "start": "next start",
     "lint": "eslint",
     "lint:colors": "eslint . --ext .ts,.tsx",
+    "perf:benchmark": "playwright test tests/performance/ --reporter=list",
+    "perf:compare": "tsx tests/performance/compare-baseline.ts tests/performance/current-metrics.json",
+    "perf:update-baseline": "PERF_UPDATE_BASELINE=true tsx tests/performance/compare-baseline.ts tests/performance/current-metrics.json",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:e2e": "playwright test",
@@ -49,6 +52,7 @@
     "jsdom": "^25.0.1",
     "msw": "^2.6.8",
     "tailwindcss": "^4",
+    "tsx": "^4.19.0",
     "typescript": "^5",
     "vitest": "^3.2.4"
   }

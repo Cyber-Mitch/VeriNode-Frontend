@@ -11,7 +11,7 @@ export interface DelegationNode {
     apr?: number;
     delegatorCount?: number;
     totalStake?: number;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   // Optional layout/rendering properties
   x?: number;
