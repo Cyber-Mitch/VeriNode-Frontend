@@ -1,0 +1,68 @@
+import { sendTransaction as rpcSendTransaction } from "@/src/lib/stellar/rpcClient"
+import { buildStakingTransaction } from "@/src/lib/stellar/transaction"
+import type { StakingAction } from "@/src/store/stakingStore"
+
+/**
+ * Staking API.
+ *
+ * Wraps the transaction builder + Soroban RPC client behind a small,
+ * action-oriented surface. Each method builds the envelope, submits it, and
+ * resolves with the real on-chain transaction hash — or throws a
+ * `StakingSubmitError` carrying a decoded reason the UI can surface.
+ */
+
+export class StakingSubmitError extends Error {
+  /** Stable error code from the RPC layer (e.g. 'HostError'), when available. */
+  code?: string
+  constructor(message: string, code?: string) {
+    super(message)
+    this.name = "StakingSubmitError"
+    this.code = code
+  }
+}
+
+export interface SubmitResult {
+  transactionHash: string
+}
+
+export interface SubmitParams {
+  amount: number
+  source: string
+}
+
+async function submit(
+  action: StakingAction,
+  { amount, source }: SubmitParams
+): Promise<SubmitResult> {
+  const { xdr } = buildStakingTransaction({ action, amount, source })
+  const result = await rpcSendTransaction(xdr)
+
+  if (result.status === "confirmed") {
+    return { transactionHash: result.txHash }
+  }
+  if (result.status === "error") {
+    throw new StakingSubmitError(decodeError(result.error), result.code)
+  }
+  // network_error — surfaced as a retryable failure.
+  throw new StakingSubmitError(result.error, "network_error")
+}
+
+/** Turn raw RPC error text into a human-readable reason. */
+function decodeError(raw: string): string {
+  if (raw.includes("HostError")) {
+    return "Contract rejected the transaction (HostError)"
+  }
+  if (raw.includes("tx_insufficient_balance")) {
+    return "Insufficient balance for this operation"
+  }
+  return raw || "Transaction failed"
+}
+
+export const staking = {
+  submitStake: (p: SubmitParams) => submit("stake", p),
+  submitUnstake: (p: SubmitParams) => submit("unstake", p),
+  submitRestake: (p: SubmitParams) => submit("restake", p),
+  submitDelegate: (p: SubmitParams) => submit("delegate", p),
+  submitUndelegate: (p: SubmitParams) => submit("undelegate", p),
+  submit,
+}

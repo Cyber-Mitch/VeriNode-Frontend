@@ -2,31 +2,58 @@
   "name": "verinode-frontend",
   "version": "0.1.0",
   "private": true,
-  "description": "Frontend for VeriNode — decentralized savings circles (ROSCA) protocol on Stellar Soroban",
+  "description": "Frontend for VeriNode â€” decentralized savings circles (ROSCA) protocol on Stellar Soroban",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:analyze": "ANALYZE=true next build",
     "start": "next start",
     "lint": "eslint",
+    "lint:colors": "eslint . --ext .ts,.tsx",
     "perf:benchmark": "playwright test tests/performance/ --reporter=list",
     "perf:compare": "tsx tests/performance/compare-baseline.ts tests/performance/current-metrics.json",
-    "perf:update-baseline": "PERF_UPDATE_BASELINE=true tsx tests/performance/compare-baseline.ts tests/performance/current-metrics.json"
+    "perf:update-baseline": "PERF_UPDATE_BASELINE=true tsx tests/performance/compare-baseline.ts tests/performance/current-metrics.json",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:wallet": "playwright test --project=wallet-ci",
+    "test:e2e:wallet:headed": "playwright test --project=wallet-ci --headed",
+    "test:e2e:wallet:debug": "playwright test --project=wallet-ci --debug",
+    "test:e2e:ci": "playwright test --project=wallet-ci"
   },
   "dependencies": {
+    "@stellar/stellar-sdk": "^16.0.1",
+    "@tanstack/react-query": "^5.101.0",
+    "chart.js": "^4.5.1",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "date-fns": "^4.4.0",
+    "isomorphic-dompurify": "^2.36.0",
     "next": "16.1.6",
+    "qrcode": "^1.5.4",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-chartjs-2": "^5.3.1",
+    "react-dom": "19.2.3",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@next/bundle-analyzer": "16.1.6",
     "@playwright/test": "^1.52.0",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.1.0",
     "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
+    "fast-check": "^3.23.2",
+    "jsdom": "^25.0.1",
+    "msw": "^2.6.8",
     "tailwindcss": "^4",
     "tsx": "^4.19.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
