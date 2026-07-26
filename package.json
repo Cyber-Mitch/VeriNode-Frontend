@@ -19,7 +19,11 @@
     "test:e2e:wallet": "playwright test --project=wallet-ci",
     "test:e2e:wallet:headed": "playwright test --project=wallet-ci --headed",
     "test:e2e:wallet:debug": "playwright test --project=wallet-ci --debug",
-    "test:e2e:ci": "playwright test --project=wallet-ci"
+    "test:e2e:ci": "playwright test --project=wallet-ci",
+    "typecheck": "tsc --noEmit --pretty false",
+    "precommit": "node scripts/pre-commit-check.mjs",
+    "prepare": "node scripts/install-git-hooks.mjs",
+    "test:precommit": "node --test tests/precommit/*.test.mjs"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
