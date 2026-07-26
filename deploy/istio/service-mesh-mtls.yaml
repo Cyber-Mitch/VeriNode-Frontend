@@ -1,0 +1,79 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: verinode
+  labels:
+    istio-injection: enabled
+---
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default-strict-mtls
+  namespace: verinode
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: verinode-api-mtls
+  namespace: verinode
+spec:
+  host: verinode-api.verinode.svc.cluster.local
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+  subsets:
+    - name: blue
+      labels:
+        version: blue
+    - name: green
+      labels:
+        version: green
+    - name: canary
+      labels:
+        version: canary
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: verinode-api-blue-green
+  namespace: verinode
+spec:
+  hosts:
+    - verinode-api.verinode.svc.cluster.local
+  http:
+    - name: primary
+      route:
+        - destination:
+            host: verinode-api.verinode.svc.cluster.local
+            subset: blue
+          weight: 90
+        - destination:
+            host: verinode-api.verinode.svc.cluster.local
+            subset: canary
+          weight: 10
+        - destination:
+            host: verinode-api.verinode.svc.cluster.local
+            subset: green
+          weight: 0
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: frontend-to-api-only
+  namespace: verinode
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: verinode-api
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - cluster.local/ns/verinode/sa/verinode-frontend
+      to:
+        - operation:
+            methods: ["GET", "POST"]
