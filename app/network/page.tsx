@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { LightClientSyncIndicator } from '@/src/components/network/LightClientSyncIndicator';
+import { SloMonitoringDashboard } from '@/src/components/slo/SloMonitoringDashboard';
 import dynamic from 'next/dynamic';
 import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton';
 
@@ -60,6 +61,7 @@ export default function NetworkStatus() {
       <h1 className="text-3xl font-bold mb-8 text-zinc-900 dark:text-zinc-50">Network Status</h1>
 
       <div className="grid grid-cols-1 gap-8">
+        <SloMonitoringDashboard />
         <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 shadow-sm border border-zinc-200 dark:border-zinc-800">
           <h2 className="mb-4 text-xl font-semibold text-zinc-900 dark:text-zinc-50">Validator topology</h2>
           <NetworkGraph />
