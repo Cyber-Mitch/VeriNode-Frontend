@@ -12,6 +12,7 @@ import React, {
 import { useQueryClient } from '@tanstack/react-query';
 import type { WalletAccount, WalletProviderType } from '@/src/types/wallet';
 import { clearAllCaches } from '@/src/lib/reactQuery';
+import { logger } from '@/src/services/logging';
 
 interface WalletContextValue {
   activeAccount: WalletAccount | null;
@@ -97,7 +98,7 @@ function detectProvider(): WalletProviderType | null {
 
 function captureBreadcrumb(previousKey: string | null, newKey: string | null, flushDuration: number, cacheEntriesInvalidated: number) {
   if (typeof process !== 'undefined' && process.env.NODE_ENV === 'development') {
-    console.info('[WalletProvider] account switch:', { previousKey, newKey, flushDuration, cacheEntriesInvalidated });
+    logger.info('wallet account switch completed', { 'event.name': 'wallet.account_switch_completed', 'user.id': newKey ?? 'anonymous', 'wallet.previous_user_id': previousKey ?? 'anonymous', 'wallet.cache_flush.duration_ms': flushDuration, 'wallet.cache_entries_invalidated': cacheEntriesInvalidated });
   }
 }
 
