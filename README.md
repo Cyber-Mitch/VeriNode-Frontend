@@ -24,12 +24,26 @@ Ensure you have the required toolchains installed:
 ```bash
 # Clone the repository (if running manually)
 git clone https://github.com/VeriNode-Labs/VeriNode-Frontend
+cd VeriNode-Frontend
 
-# Install dependencies or build
-npm install
+# Run the onboarding script
+npm run setup:dev
 
 # Start development server
 npm run dev
+```
+
+The onboarding script verifies the local Node.js version, creates `.env.local` from `.env.example` when needed, installs dependencies with `npm ci` when a lockfile is present, and runs the linter as a smoke check. Use flags for faster or CI-like runs:
+
+```bash
+# Preview actions without changing files or installing dependencies
+npm run setup:dev -- --dry-run
+
+# Keep existing dependencies and only validate environment/configuration
+npm run setup:dev -- --skip-install
+
+# Do not create .env.local from .env.example
+npm run setup:dev -- --skip-env
 ```
 
 ## 🧪 Testing
