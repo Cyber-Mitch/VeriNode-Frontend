@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react"
 import { OfflineBanner } from "@/src/components/layout/OfflineBanner"
 import { usePwaInstall } from "@/src/hooks/usePwaInstall"
+import { logger } from "@/src/services/logging"
 
 function ServiceWorkerRegistrar() {
   useEffect(() => {
@@ -21,7 +22,7 @@ function ServiceWorkerRegistrar() {
           scope: "/",
         })
       } catch (err) {
-        console.warn("[PWA] Service worker registration failed", err)
+        logger.warn("service worker registration failed", { "event.name": "pwa.service_worker_registration_failed", "error.type": err instanceof Error ? err.name : typeof err })
       }
     }
 
@@ -43,7 +44,7 @@ function SyncMessageListener() {
 
     const handler = (event: MessageEvent) => {
       if (event.data?.type === "SYNC_SUBMISSIONS") {
-        console.info("[PWA] Sync event received — draining submission queue")
+        logger.info("service worker sync message received", { "event.name": "pwa.sync_submissions_received" })
       }
     }
 
