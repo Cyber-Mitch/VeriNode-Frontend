@@ -8,6 +8,9 @@
 
 import type {
   ConsumerGroupLag,
+  DeadLetterMessage,
+  DeadLetterQueueMetrics,
+  DeadLetterReason,
   ConsumerGroupScalingConfig,
   PartitionLag,
   PartitionLagStatus,
@@ -32,6 +35,96 @@ export function deriveGroupStatus(partitions: PartitionLag[]): PartitionLagStatu
   if (partitions.some((p) => p.status === 'critical')) return 'critical';
   if (partitions.some((p) => p.status === 'warning')) return 'warning';
   return 'healthy';
+}
+
+
+// ── Dead-letter queue logic ─────────────────────────────────────────────────
+
+const MAX_PAYLOAD_PREVIEW_CHARS = 512;
+const DLQ_CRITICAL_AGE_MS = 15 * 60 * 1000;
+const DLQ_CRITICAL_DEPTH = 100;
+const SECRET_FIELD_PATTERN = /(password|secret|token|privateKey|authorization)/i;
+
+export interface FailedMessageInput {
+  topic: string;
+  partition: number;
+  offset: number;
+  consumerGroupId: string;
+  attempts: number;
+  error: unknown;
+  payload: unknown;
+  traceId?: string;
+  failedAt?: number;
+}
+
+export function classifyDeadLetterReason(error: unknown, attempts: number): DeadLetterReason {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  if (/schema|validation|parse|invalid json/i.test(message)) return 'schema-invalid';
+  if (/poison|non-retryable|fatal/i.test(message)) return 'poison-message';
+  if (attempts >= 3) return 'retry-exhausted';
+  if (message) return 'handler-error';
+  return 'unknown';
+}
+
+function redactValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [
+        key,
+        SECRET_FIELD_PATTERN.test(key) ? '[REDACTED]' : redactValue(nested),
+      ]),
+    );
+  }
+  return value;
+}
+
+export function createPayloadPreview(payload: unknown): string {
+  let serialized: string;
+  try {
+    serialized = typeof payload === 'string' ? payload : JSON.stringify(redactValue(payload));
+  } catch {
+    serialized = '[unserializable payload]';
+  }
+  return serialized.length > MAX_PAYLOAD_PREVIEW_CHARS
+    ? `${serialized.slice(0, MAX_PAYLOAD_PREVIEW_CHARS)}…`
+    : serialized;
+}
+
+export function buildDeadLetterMessage(input: FailedMessageInput): DeadLetterMessage {
+  const failedAt = input.failedAt ?? Date.now();
+  return {
+    id: `${input.consumerGroupId}:${input.topic}:${input.partition}:${input.offset}`,
+    topic: input.topic,
+    partition: input.partition,
+    offset: input.offset,
+    consumerGroupId: input.consumerGroupId,
+    attempts: input.attempts,
+    reason: classifyDeadLetterReason(input.error, input.attempts),
+    errorMessage: input.error instanceof Error ? input.error.message : String(input.error ?? 'Unknown error'),
+    payloadPreview: createPayloadPreview(input.payload),
+    firstFailedAt: failedAt,
+    lastFailedAt: failedAt,
+    status: 'quarantined',
+    traceId: input.traceId,
+  };
+}
+
+export function summarizeDeadLetters(
+  messages: DeadLetterMessage[],
+  now: number = Date.now(),
+): DeadLetterQueueMetrics {
+  const oldest = messages.reduce((age, message) => Math.max(age, now - message.firstFailedAt), 0);
+  const metrics = messages.reduce<DeadLetterQueueMetrics>((acc, message) => {
+    acc.total += 1;
+    if (message.status === 'quarantined') acc.quarantined += 1;
+    if (message.status === 'replay-ready') acc.replayReady += 1;
+    if (message.status === 'replayed') acc.replayed += 1;
+    if (message.status === 'discarded') acc.discarded += 1;
+    return acc;
+  }, { total: 0, quarantined: 0, replayReady: 0, replayed: 0, discarded: 0, oldestMessageAgeMs: oldest, critical: false });
+  metrics.critical = metrics.quarantined >= DLQ_CRITICAL_DEPTH || oldest >= DLQ_CRITICAL_AGE_MS;
+  return metrics;
 }
 
 // ── Auto-scaling logic ────────────────────────────────────────────────────────
@@ -184,11 +277,30 @@ export interface KafkaMonitoringProvider {
    * Returns the resulting ScalingEvent.
    */
   triggerManualScale(groupId: string, targetInstances: number): Promise<ScalingEvent>;
+
+  /** Fetch messages currently retained in the dead-letter queue. */
+  fetchDeadLetters(): Promise<DeadLetterMessage[]>;
+
+  /** Mark a dead-lettered message as replay-ready or replayed after operator review. */
+  updateDeadLetterStatus(id: string, status: DeadLetterMessage['status']): Promise<DeadLetterMessage>;
 }
 
 /** Demo provider — deterministic, zero network calls. */
 export function createDemoKafkaMonitoringService(): KafkaMonitoringProvider {
   const scalingStatuses = generateDemoScalingStatuses();
+  const deadLetters: DeadLetterMessage[] = [
+    buildDeadLetterMessage({
+      topic: 'validator-attestations',
+      partition: 2,
+      offset: 88421,
+      consumerGroupId: 'attestation-processor',
+      attempts: 3,
+      error: new Error('schema validation failed: missing validatorIndex'),
+      payload: { attestationId: 'att_88421', token: 'demo-secret', slot: 982121 },
+      traceId: '4bf92f3577b34da6a3ce929d0e0e4736',
+      failedAt: Date.now() - 5 * 60 * 1000,
+    }),
+  ];
 
   return {
     async fetchConsumerLag() {
@@ -197,6 +309,18 @@ export function createDemoKafkaMonitoringService(): KafkaMonitoringProvider {
 
     async fetchScalingStatuses() {
       return scalingStatuses;
+    },
+
+    async fetchDeadLetters() {
+      return deadLetters;
+    },
+
+    async updateDeadLetterStatus(id, status) {
+      const message = deadLetters.find((m) => m.id === id);
+      if (!message) throw new Error(`Dead-letter message not found: ${id}`);
+      message.status = status;
+      message.lastFailedAt = Date.now();
+      return message;
     },
 
     async triggerManualScale(groupId, targetInstances) {
@@ -233,6 +357,27 @@ export function createKafkaMonitoringService(baseUrl: string): KafkaMonitoringPr
       } catch {
         return [];
       }
+    },
+
+
+    async fetchDeadLetters() {
+      try {
+        const res = await fetch(`${baseUrl}/api/kafka/dead-letters`);
+        if (!res.ok) return [];
+        return (await res.json()) as DeadLetterMessage[];
+      } catch {
+        return [];
+      }
+    },
+
+    async updateDeadLetterStatus(id, status) {
+      const res = await fetch(`${baseUrl}/api/kafka/dead-letters/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error(`DLQ update failed: ${res.status}`);
+      return (await res.json()) as DeadLetterMessage;
     },
 
     async triggerManualScale(groupId, targetInstances) {

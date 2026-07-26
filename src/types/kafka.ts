@@ -4,6 +4,17 @@
 /** Health status of a single consumer group partition. */
 export type PartitionLagStatus = 'healthy' | 'warning' | 'critical';
 
+/** Processing state for a failed Kafka message routed to the dead-letter queue. */
+export type DeadLetterMessageStatus = 'quarantined' | 'replay-ready' | 'replayed' | 'discarded';
+
+/** Why a message was routed to the dead-letter queue. */
+export type DeadLetterReason =
+  | 'schema-invalid'
+  | 'handler-error'
+  | 'retry-exhausted'
+  | 'poison-message'
+  | 'unknown';
+
 /** A single partition's lag snapshot. */
 export interface PartitionLag {
   /** Kafka partition number (0-indexed). */
@@ -34,6 +45,37 @@ export interface ConsumerGroupLag {
   capturedAt: number;
   /** Derived group-level health. */
   status: PartitionLagStatus;
+}
+
+/** Failed message envelope retained for safe inspection and replay. */
+export interface DeadLetterMessage {
+  /** Stable deterministic ID for idempotent upserts. */
+  id: string;
+  topic: string;
+  partition: number;
+  offset: number;
+  consumerGroupId: string;
+  /** Number of delivery attempts before quarantine. */
+  attempts: number;
+  reason: DeadLetterReason;
+  errorMessage: string;
+  /** Redacted payload preview; secrets must not be stored here. */
+  payloadPreview: string;
+  firstFailedAt: number;
+  lastFailedAt: number;
+  status: DeadLetterMessageStatus;
+  traceId?: string;
+}
+
+/** Aggregated dead-letter metrics for alerting and dashboards. */
+export interface DeadLetterQueueMetrics {
+  total: number;
+  quarantined: number;
+  replayReady: number;
+  replayed: number;
+  discarded: number;
+  oldestMessageAgeMs: number;
+  critical: boolean;
 }
 
 /** Auto-scaling decision record for a consumer group. */
@@ -87,6 +129,10 @@ export interface KafkaMonitoringState {
   scalingStatus: Record<string, ScalingStatus>;
   /** History of scaling events (most-recent first). */
   scalingHistory: ScalingEvent[];
+  /** Failed messages routed to the dead-letter queue, keyed by message ID. */
+  deadLetters: Record<string, DeadLetterMessage>;
+  /** Aggregated dead-letter queue metrics. */
+  deadLetterMetrics: DeadLetterQueueMetrics;
   /** Whether initial data has been loaded. */
   isLoaded: boolean;
   /** Last poll error message, if any. */

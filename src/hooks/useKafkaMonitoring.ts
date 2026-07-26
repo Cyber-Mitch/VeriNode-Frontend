@@ -15,6 +15,7 @@ import {
   createDemoKafkaMonitoringService,
   computeTargetInstances,
   buildScalingEvent,
+  summarizeDeadLetters,
 } from '../services/kafkaMonitoringService';
 import type { KafkaMonitoringProvider } from '../services/kafkaMonitoringService';
 
@@ -52,15 +53,18 @@ export function useKafkaMonitoring(options: UseKafkaMonitoringOptions = {}) {
 
     try {
       // Fetch lag snapshots and scaling statuses in parallel.
-      const [groups, statuses] = await Promise.all([
+      const [groups, statuses, deadLetters] = await Promise.all([
         svc.fetchConsumerLag(),
         svc.fetchScalingStatuses(),
+        svc.fetchDeadLetters(),
       ]);
 
       if (!mountedRef.current) return;
 
       store.setGroups(groups);
       statuses.forEach((s) => store.upsertScalingStatus(s));
+      store.setDeadLetters(deadLetters);
+      store.setDeadLetterMetrics(summarizeDeadLetters(deadLetters));
       store.markRefreshed();
 
       // Evaluate auto-scaling decisions for each group.
@@ -93,6 +97,20 @@ export function useKafkaMonitoring(options: UseKafkaMonitoringOptions = {}) {
       store.setError(err instanceof Error ? err.message : 'Kafka poll failed');
     }
   }, [store]);
+
+  const updateDeadLetterStatus = useCallback(
+    async (id: string, status: 'quarantined' | 'replay-ready' | 'replayed' | 'discarded') => {
+      try {
+        const message = await serviceRef.current.updateDeadLetterStatus(id, status);
+        store.upsertDeadLetter(message);
+        const current = useKafkaStore.getState().deadLetters;
+        store.setDeadLetterMetrics(summarizeDeadLetters(Object.values(current)));
+      } catch (err) {
+        store.setError(err instanceof Error ? err.message : 'DLQ update failed');
+      }
+    },
+    [store],
+  );
 
   // Trigger an immediate manual scale action.
   const triggerManualScale = useCallback(
@@ -146,10 +164,13 @@ export function useKafkaMonitoring(options: UseKafkaMonitoringOptions = {}) {
     groups: store.groups,
     scalingStatus: store.scalingStatus,
     scalingHistory: store.scalingHistory,
+    deadLetters: store.deadLetters,
+    deadLetterMetrics: store.deadLetterMetrics,
     isLoaded: store.isLoaded,
     error: store.error,
     lastRefreshedAt: store.lastRefreshedAt,
     triggerManualScale,
+    updateDeadLetterStatus,
     refresh: poll,
   };
 }
