@@ -1,0 +1,31 @@
+groups:
+  - name: verinode-service-mesh
+    rules:
+      - alert: VeriNodeMeshP99LatencyHigh
+        expr: histogram_quantile(0.99, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_namespace="verinode"}[5m])) by (le, destination_service)) > 100
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: VeriNode mesh P99 latency exceeded 100ms
+      - alert: VeriNodeMeshAvailabilityLow
+        expr: (sum(rate(istio_requests_total{destination_service_namespace="verinode",response_code!~"5.."}[5m])) / sum(rate(istio_requests_total{destination_service_namespace="verinode"}[5m])) * 100) < 99.99
+        for: 5m
+        labels:
+          severity: page
+        annotations:
+          summary: VeriNode mesh availability is below 99.99%
+      - alert: VeriNodeMeshMtlsHandshakeFailure
+        expr: sum(rate(istio_requests_total{destination_service_namespace="verinode",response_flags=~".*UF.*|.*UO.*"}[5m])) > 0
+        for: 2m
+        labels:
+          severity: security
+        annotations:
+          summary: VeriNode mesh mTLS handshake failures detected
+      - alert: VeriNodeMeshCertificateExpirySoon
+        expr: min(istio_agent_secret_expiration_seconds{namespace="verinode"} - time()) < 7200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: VeriNode mesh workload certificate expires in less than 2 hours
