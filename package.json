@@ -19,7 +19,8 @@
     "test:e2e:wallet": "playwright test --project=wallet-ci",
     "test:e2e:wallet:headed": "playwright test --project=wallet-ci --headed",
     "test:e2e:wallet:debug": "playwright test --project=wallet-ci --debug",
-    "test:e2e:ci": "playwright test --project=wallet-ci"
+    "test:e2e:ci": "playwright test --project=wallet-ci",
+    "security:audit": "node scripts/security-audit.mjs"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
