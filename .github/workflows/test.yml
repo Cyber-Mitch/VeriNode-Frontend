@@ -23,6 +23,15 @@ jobs:
         run: npm ci
       - name: Run Linter
         run: npm run lint
+      - name: Enforce Unit Test Coverage
+        run: npm run test:coverage
+      - name: Upload Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          if-no-files-found: error
       - name: Check Build
         run: npm run build
 
