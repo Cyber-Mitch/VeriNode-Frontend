@@ -4,6 +4,7 @@
   "private": true,
   "description": "Frontend for VeriNode â€” decentralized savings circles (ROSCA) protocol on Stellar Soroban",
   "scripts": {
+    "setup:dev": "node scripts/setup-dev.mjs",
     "dev": "next dev",
     "build": "next build",
     "build:analyze": "ANALYZE=true next build",
