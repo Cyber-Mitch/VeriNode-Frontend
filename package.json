@@ -4,7 +4,6 @@
   "private": true,
   "description": "Frontend for VeriNode â€” decentralized savings circles (ROSCA) protocol on Stellar Soroban",
   "scripts": {
-    "setup:dev": "node scripts/setup-dev.mjs",
     "dev": "next dev",
     "build": "next build",
     "build:analyze": "ANALYZE=true next build",
@@ -21,7 +20,10 @@
     "test:e2e:wallet:headed": "playwright test --project=wallet-ci --headed",
     "test:e2e:wallet:debug": "playwright test --project=wallet-ci --debug",
     "test:e2e:ci": "playwright test --project=wallet-ci",
-    "security:audit": "node scripts/security-audit.mjs"
+    "typecheck": "tsc --noEmit --pretty false",
+    "precommit": "node scripts/pre-commit-check.mjs",
+    "prepare": "node scripts/install-git-hooks.mjs",
+    "test:precommit": "node --test tests/precommit/*.test.mjs"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
