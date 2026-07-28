@@ -1,3 +1,5 @@
+import { logger } from '@/src/services/logging';
+
 export type FeatureFlag =
   | 'staking'
   | 'governance'
@@ -36,7 +38,7 @@ export function persistOverrides(overrides: FeatureFlagOverride): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
   } catch (e) {
-    console.error('feature-flags: failed to persist overrides', e);
+    logger.error('feature flag overrides persist failed', { 'event.name': 'feature_flags.persist_failed', 'db.system': 'web_storage', 'db.operation.name': 'setItem', 'db.collection.name': STORAGE_KEY, 'error.type': e instanceof Error ? e.name : typeof e });
   }
 }
 
