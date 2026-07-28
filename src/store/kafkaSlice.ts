@@ -5,6 +5,8 @@ import { create } from 'zustand';
 import type {
   ConsumerGroupLag,
   KafkaMonitoringState,
+  DeadLetterMessage,
+  DeadLetterQueueMetrics,
   ScalingEvent,
   ScalingStatus,
 } from '../types/kafka';
@@ -16,6 +18,12 @@ interface KafkaMonitoringActions {
   setGroups: (groups: ConsumerGroupLag[]) => void;
   /** Update scaling status for a group. */
   upsertScalingStatus: (status: ScalingStatus) => void;
+  /** Replace dead-letter queue messages. */
+  setDeadLetters: (messages: DeadLetterMessage[]) => void;
+  /** Upsert a single dead-letter queue message. */
+  upsertDeadLetter: (message: DeadLetterMessage) => void;
+  /** Recompute dead-letter metrics from the current queue. */
+  setDeadLetterMetrics: (metrics: DeadLetterQueueMetrics) => void;
   /** Prepend a new scaling event to the history ring-buffer (max 200). */
   addScalingEvent: (event: ScalingEvent) => void;
   /** Mark store as loaded and record the refresh timestamp. */
@@ -28,10 +36,22 @@ interface KafkaMonitoringActions {
 
 const MAX_SCALING_HISTORY = 200;
 
+const emptyDeadLetterMetrics: DeadLetterQueueMetrics = {
+  total: 0,
+  quarantined: 0,
+  replayReady: 0,
+  replayed: 0,
+  discarded: 0,
+  oldestMessageAgeMs: 0,
+  critical: false,
+};
+
 const initialState: KafkaMonitoringState = {
   groups: {},
   scalingStatus: {},
   scalingHistory: [],
+  deadLetters: {},
+  deadLetterMetrics: emptyDeadLetterMetrics,
   isLoaded: false,
   error: null,
   lastRefreshedAt: null,
@@ -55,6 +75,18 @@ export const useKafkaStore = create<KafkaMonitoringState & KafkaMonitoringAction
       set((s) => ({
         scalingStatus: { ...s.scalingStatus, [status.groupId]: status },
       })),
+
+    setDeadLetters: (messages) =>
+      set(() => ({
+        deadLetters: Object.fromEntries(messages.map((m) => [m.id, m])),
+      })),
+
+    upsertDeadLetter: (message) =>
+      set((s) => ({
+        deadLetters: { ...s.deadLetters, [message.id]: message },
+      })),
+
+    setDeadLetterMetrics: (metrics) => set({ deadLetterMetrics: metrics }),
 
     addScalingEvent: (event) =>
       set((s) => ({

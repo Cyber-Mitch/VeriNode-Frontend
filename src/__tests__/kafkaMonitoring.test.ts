@@ -7,6 +7,10 @@ import {
   deriveGroupStatus,
   computeTargetInstances,
   buildScalingEvent,
+  buildDeadLetterMessage,
+  classifyDeadLetterReason,
+  createPayloadPreview,
+  summarizeDeadLetters,
   generateDemoSnapshot,
   generateDemoScalingStatuses,
   createDemoKafkaMonitoringService,
@@ -65,6 +69,57 @@ describe('deriveGroupStatus', () => {
   it('critical takes precedence over warning', () => {
     const partitions = [makePartition(5_000), makePartition(20_000)];
     expect(deriveGroupStatus(partitions)).toBe('critical');
+  });
+});
+
+
+// ── Dead-letter queue ───────────────────────────────────────────────────────
+
+describe('dead-letter queue helpers', () => {
+  it('classifies schema, poison, retry-exhausted, and handler failures', () => {
+    expect(classifyDeadLetterReason(new Error('schema validation failed'), 1)).toBe('schema-invalid');
+    expect(classifyDeadLetterReason(new Error('fatal poison message'), 1)).toBe('poison-message');
+    expect(classifyDeadLetterReason(new Error('temporary timeout'), 3)).toBe('retry-exhausted');
+    expect(classifyDeadLetterReason(new Error('temporary timeout'), 1)).toBe('handler-error');
+  });
+
+  it('builds deterministic message IDs and redacts sensitive payload fields', () => {
+    const message = buildDeadLetterMessage({
+      topic: 'validator-attestations',
+      partition: 4,
+      offset: 42,
+      consumerGroupId: 'attestation-processor',
+      attempts: 3,
+      error: new Error('handler failed'),
+      payload: { validatorIndex: 123, token: 'secret-token', nested: { privateKey: 'abc' } },
+      failedAt: 1000,
+    });
+
+    expect(message.id).toBe('attestation-processor:validator-attestations:4:42');
+    expect(message.reason).toBe('retry-exhausted');
+    expect(message.payloadPreview).toContain('[REDACTED]');
+    expect(message.payloadPreview).not.toContain('secret-token');
+    expect(message.payloadPreview).not.toContain('abc');
+  });
+
+  it('limits payload previews to a bounded size', () => {
+    const preview = createPayloadPreview('x'.repeat(1000));
+    expect(preview.length).toBeLessThanOrEqual(513);
+    expect(preview.endsWith('…')).toBe(true);
+  });
+
+  it('summarizes queue depth and critical age for alerting', () => {
+    const now = 20 * 60 * 1000;
+    const messages = [
+      { ...buildDeadLetterMessage({ topic: 't', partition: 0, offset: 1, consumerGroupId: 'g', attempts: 1, error: 'err', payload: {}, failedAt: 0 }), status: 'replay-ready' as const },
+      buildDeadLetterMessage({ topic: 't', partition: 0, offset: 2, consumerGroupId: 'g', attempts: 1, error: 'err', payload: {}, failedAt: now - 1000 }),
+    ];
+
+    const metrics = summarizeDeadLetters(messages, now);
+    expect(metrics.total).toBe(2);
+    expect(metrics.quarantined).toBe(1);
+    expect(metrics.replayReady).toBe(1);
+    expect(metrics.critical).toBe(true);
   });
 });
 
@@ -232,6 +287,21 @@ describe('createDemoKafkaMonitoringService', () => {
     expect(result.length).toBeGreaterThan(0);
   });
 
+  it('fetchDeadLetters resolves to redacted quarantined messages', async () => {
+    const svc = createDemoKafkaMonitoringService();
+    const result = await svc.fetchDeadLetters();
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].status).toBe('quarantined');
+    expect(result[0].payloadPreview).toContain('[REDACTED]');
+  });
+
+  it('updateDeadLetterStatus transitions a message for replay', async () => {
+    const svc = createDemoKafkaMonitoringService();
+    const [message] = await svc.fetchDeadLetters();
+    const updated = await svc.updateDeadLetterStatus(message.id, 'replay-ready');
+    expect(updated.status).toBe('replay-ready');
+  });
+
   it('triggerManualScale updates the instance count', async () => {
     const svc = createDemoKafkaMonitoringService();
     const statuses = await svc.fetchScalingStatuses();
@@ -276,6 +346,19 @@ describe('kafkaSlice store', () => {
     }
 
     expect(useKafkaStore.getState().scalingHistory.length).toBe(200);
+  });
+
+  it('setDeadLetters and upsertDeadLetter update DLQ state', async () => {
+    const { useKafkaStore } = await import('../store/kafkaSlice');
+    useKafkaStore.getState().reset();
+
+    const message = buildDeadLetterMessage({ topic: 't', partition: 0, offset: 1, consumerGroupId: 'g', attempts: 3, error: 'err', payload: {} });
+    useKafkaStore.getState().setDeadLetters([message]);
+    useKafkaStore.getState().upsertDeadLetter({ ...message, status: 'replayed' });
+    useKafkaStore.getState().setDeadLetterMetrics(summarizeDeadLetters(Object.values(useKafkaStore.getState().deadLetters)));
+
+    expect(useKafkaStore.getState().deadLetters[message.id].status).toBe('replayed');
+    expect(useKafkaStore.getState().deadLetterMetrics.total).toBe(1);
   });
 
   it('markRefreshed sets isLoaded and lastRefreshedAt', async () => {
