@@ -29,6 +29,7 @@
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.4.0",
     "isomorphic-dompurify": "^2.36.0",
+    "lightweight-charts": "^5.2.1",
     "next": "16.1.6",
     "qrcode": "^1.5.4",
     "react": "19.2.3",
