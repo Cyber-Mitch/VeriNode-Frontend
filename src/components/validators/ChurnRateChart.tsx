@@ -1,8 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { NetworkQueueSnapshot } from '@/src/types/exitQueue'
-import { EPOCH_MS } from '@/src/utils/epochTime'
 
 const VIEW_W = 600
 const VIEW_H = 100
@@ -17,8 +16,18 @@ const WINDOW_MS = 7 * 24 * 60 * 60 * 1_000
 export function ChurnRateChart({ samples }: { samples: NetworkQueueSnapshot[] }) {
   const [hover, setHover] = useState<number | null>(null)
 
+  // Stable `now` updated every minute so useMemo doesn't call Date.now() directly.
+  const [now, setNow] = useState(() => Date.now())
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    intervalRef.current = setInterval(() => setNow(Date.now()), 60_000)
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current)
+    }
+  }, [])
+
   const { bars, maxChurn } = useMemo(() => {
-    const cutoff = Date.now() - WINDOW_MS
+    const cutoff = now - WINDOW_MS
     const recent = samples.filter((s) => s.timestamp >= cutoff)
     if (recent.length === 0) return { bars: [], maxChurn: 0 }
 
@@ -30,7 +39,7 @@ export function ChurnRateChart({ samples }: { samples: NetworkQueueSnapshot[] })
     }))
     const maxChurn = Math.max(...bars.map((b) => b.churn), 1)
     return { bars, maxChurn }
-  }, [samples])
+  }, [samples, now])
 
   if (bars.length === 0) {
     return (

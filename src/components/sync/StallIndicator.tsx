@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import type { StallReason } from '@/src/types/sync'
 
 const STALL_LABELS: Record<StallReason, string> = {
@@ -28,7 +29,18 @@ export function StallIndicator({
   onRestartSync,
   lastProgressAt,
 }: StallIndicatorProps) {
-  const stalledForMs = Date.now() - lastProgressAt
+  // Keep a stable `now` that updates every second so Date.now() is never
+  // called directly during render (which would make the component impure).
+  const [now, setNow] = useState(() => Date.now())
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    intervalRef.current = setInterval(() => setNow(Date.now()), 1_000)
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current)
+    }
+  }, [])
+
+  const stalledForMs = now - lastProgressAt
   const stalledForSec = Math.floor(stalledForMs / 1_000)
   const stalledLabel =
     stalledForSec < 120

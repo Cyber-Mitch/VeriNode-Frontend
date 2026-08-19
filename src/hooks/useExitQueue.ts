@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   ExitQueueProjection,
   NetworkQueueSnapshot,
@@ -58,14 +58,17 @@ export function useExitQueue(
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notificationsEnabled, setNotificationsEnabled] = useState(initialNotifications)
-  const [lastNotifiedPosition, setLastNotifiedPosition] = useState<number | null>(null)
+  // useRef instead of useState so we can update it inside effects without
+  // triggering a cascading re-render (fixes react-hooks/set-state-in-effect).
+  const lastNotifiedPositionRef = useRef<number | null>(null)
 
   // Clear stale position when validator changes (during render).
   const [tracked, setTracked] = useState<number | null | undefined>(undefined)
   if (tracked !== validatorIndex) {
     setTracked(validatorIndex)
     setPosition(null)
-    setLastNotifiedPosition(null)
+    // Note: lastNotifiedPositionRef.current is reset inside the polling
+    // useEffect below when validatorIndex changes, avoiding a ref write during render.
   }
 
   const isNearExit = useMemo(
@@ -81,7 +84,7 @@ export function useExitQueue(
   // Send notification when near exit (once per crossing of threshold).
   useEffect(() => {
     if (!notificationsEnabled || !isNearExit || !position) return
-    if (lastNotifiedPosition !== null && lastNotifiedPosition <= NEAR_EXIT_THRESHOLD) return
+    if (lastNotifiedPositionRef.current !== null && lastNotifiedPositionRef.current <= NEAR_EXIT_THRESHOLD) return
 
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('Validator Near Exit', {
@@ -90,13 +93,13 @@ export function useExitQueue(
         tag: `exit-near-${validatorIndex}`,
       })
     }
-    setLastNotifiedPosition(position.positionOffset)
-  }, [isNearExit, notificationsEnabled, position, lastNotifiedPosition, validatorIndex])
+    lastNotifiedPositionRef.current = position.positionOffset
+  }, [isNearExit, notificationsEnabled, position, validatorIndex])
 
   // Send notification when exit complete (once).
   useEffect(() => {
     if (!notificationsEnabled || !hasExited || !position) return
-    if (lastNotifiedPosition !== null && lastNotifiedPosition <= 0) return
+    if (lastNotifiedPositionRef.current !== null && lastNotifiedPositionRef.current <= 0) return
 
     if ('Notification' in window && Notification.permission === 'granted') {
       new Notification('Validator Exit Complete', {
@@ -105,8 +108,8 @@ export function useExitQueue(
         tag: `exit-complete-${validatorIndex}`,
       })
     }
-    setLastNotifiedPosition(0)
-  }, [hasExited, notificationsEnabled, position, lastNotifiedPosition, validatorIndex])
+    lastNotifiedPositionRef.current = 0
+  }, [hasExited, notificationsEnabled, position, validatorIndex])
 
   const toggleNotifications = useCallback(async () => {
     if (!notificationsEnabled && 'Notification' in window) {
@@ -126,6 +129,9 @@ export function useExitQueue(
 
   useEffect(() => {
     if (validatorIndex === null) return
+
+    // Reset notification tracking whenever the validator being watched changes.
+    lastNotifiedPositionRef.current = null
 
     let cancelled = false
     let interval: number | undefined
