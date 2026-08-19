@@ -7,9 +7,9 @@ import {
   type NodeStatusEvent,
   type UseNodeStatusResult,
 } from '@/src/hooks/useNodeStatus'
+import { webSocketManager } from '@/src/services/webSocketManager'
 
 const DEDUP_WINDOW_MS = 50
-const RECONNECT_DELAY_MS = 5000
 
 interface UseNodeStreamOptions {
   url: string
@@ -59,8 +59,6 @@ export function useNodeStream({
     if (!enabled || !url) return
 
     const bufferMap = bufferRef.current
-    let ws: WebSocket | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
     let closed = false
 
     const flush = () => {
@@ -76,34 +74,28 @@ export function useNodeStream({
       if (!existing || event.seq > existing.seq) bufferMap.set(event.nodeId, event)
     }
 
-    const connect = () => {
-      if (closed) return
-      ws = new WebSocket(url)
-      ws.onmessage = (e) => {
+    const release = webSocketManager.acquireConnection({
+      connectionId: `node-stream:${url}`,
+      url,
+      enabled: true,
+      onMessage: (data) => {
+        if (closed) return
         try {
-          const parsed = parseEvent(JSON.parse(e.data))
+          const parsedRaw =
+            typeof data === 'string' ? (JSON.parse(data) as unknown) : (data as unknown)
+          const parsed = parseEvent(parsedRaw)
           if (parsed) enqueue(parsed)
         } catch {
           // Ignore malformed frames.
         }
-      }
-      ws.onclose = () => {
-        ws = null
-        if (!closed) reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS)
-      }
-      ws.onerror = () => {
-        // The close handler performs reconnection.
-      }
-    }
-
-    connect()
+      },
+    })
     const flushTimer = setInterval(flush, dedupWindowMs)
 
     return () => {
       closed = true
       clearInterval(flushTimer)
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      if (ws) ws.close()
+      release()
       bufferMap.clear()
     }
   }, [url, enabled, dedupWindowMs, applyEvents])

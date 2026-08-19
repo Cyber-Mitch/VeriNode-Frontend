@@ -6,6 +6,7 @@ import { LightClientSyncIndicator } from '@/src/components/network/LightClientSy
 import { SloMonitoringDashboard } from '@/src/components/slo/SloMonitoringDashboard';
 import dynamic from 'next/dynamic';
 import { ChartSkeleton } from '@/src/components/charts/ChartSkeleton';
+import { WSHealthDashboard } from '@/src/components/network/WSHealthDashboard';
 
 const NetworkGraph = dynamic(
   () => import('@/src/components/network/NetworkGraph').then((m) => m.NetworkGraph),
@@ -62,6 +63,7 @@ export default function NetworkStatus() {
 
       <div className="grid grid-cols-1 gap-8">
         <SloMonitoringDashboard />
+        <WSHealthDashboard />
         <div className="bg-white dark:bg-zinc-900 rounded-xl p-6 shadow-sm border border-zinc-200 dark:border-zinc-800">
           <h2 className="mb-4 text-xl font-semibold text-zinc-900 dark:text-zinc-50">Validator topology</h2>
           <NetworkGraph />

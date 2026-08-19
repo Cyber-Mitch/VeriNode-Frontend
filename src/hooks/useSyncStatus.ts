@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchSyncStatus } from '@/src/lib/api/syncStatus'
+import { webSocketManager } from '@/src/services/webSocketManager'
 import type {
   SyncStatus,
   SyncSpeedPoint,
@@ -120,11 +121,9 @@ export function useSyncStatus({
   const [error, setError] = useState<string | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
 
-  const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>()
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | undefined>()
+  const releaseRef = useRef<null | (() => void)>(null)
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined)
   const mountedRef = useRef(true)
-  const reconnectAttemptsRef = useRef(0)
 
   // ------------------------------------------------------------------
   // REST fetch
@@ -151,53 +150,20 @@ export function useSyncStatus({
   // ------------------------------------------------------------------
   // WebSocket
   // ------------------------------------------------------------------
-
-  const connectWs = useCallback(() => {
-    if (!wsUrl || !mountedRef.current) return
-
-    if (reconnectAttemptsRef.current > 10) {
-      // Give up silently; REST polling (if enabled) is the fallback.
-      return
-    }
-
-    try {
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
-
-      ws.onopen = () => {
-        if (!mountedRef.current) { ws.close(); return }
-        reconnectAttemptsRef.current = 0
-        setWsConnected(true)
-      }
-
-      ws.onmessage = (event) => {
-        if (!mountedRef.current) return
-        try {
-          const msg: WSSyncUpdate = JSON.parse(event.data as string)
-          if (msg.type === 'sync-status-update') {
-            setSyncStatus(simulateStall ? buildDemoStallStatus() : msg.data)
-          }
-        } catch {
-          // Ignore malformed frames
+  const onWsMessage = useCallback(
+    (data: unknown) => {
+      if (!mountedRef.current) return
+      try {
+        const msg = data as WSSyncUpdate
+        if (msg && msg.type === 'sync-status-update') {
+          setSyncStatus(simulateStall ? buildDemoStallStatus() : msg.data)
         }
+      } catch {
+        // Ignore malformed frames
       }
-
-      ws.onerror = () => {
-        // onclose handles reconnect
-      }
-
-      ws.onclose = () => {
-        wsRef.current = null
-        if (!mountedRef.current) return
-        setWsConnected(false)
-        reconnectAttemptsRef.current += 1
-        const delay = Math.min(5_000 * Math.pow(2, reconnectAttemptsRef.current - 1), 30_000)
-        reconnectTimerRef.current = setTimeout(connectWs, delay)
-      }
-    } catch {
-      // new WebSocket() can throw in some environments (SSR, tests)
-    }
-  }, [wsUrl, simulateStall])
+    },
+    [simulateStall],
+  )
 
   // ------------------------------------------------------------------
   // Mount / cleanup
@@ -210,7 +176,20 @@ export function useSyncStatus({
     loadRest()
 
     // 2. Open WebSocket for live updates.
-    if (wsUrl) connectWs()
+    if (wsUrl) {
+      releaseRef.current = webSocketManager.acquireConnection({
+        connectionId: `sync-status:${wsUrl}`,
+        url: wsUrl,
+        enabled: true,
+        onMessage: (data) => onWsMessage(data),
+        onConnected: () => mountedRef.current && setWsConnected(true),
+        onDisconnected: () => mountedRef.current && setWsConnected(false),
+        onError: (errMsg) => {
+          if (!mountedRef.current) return
+          setError(errMsg)
+        },
+      })
+    }
 
     // 3. Optional polling fallback.
     if (pollIntervalMs > 0) {
@@ -219,16 +198,11 @@ export function useSyncStatus({
 
     return () => {
       mountedRef.current = false
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
       if (pollTimerRef.current) clearInterval(pollTimerRef.current)
-      if (wsRef.current) {
-        wsRef.current.onclose = null // prevent reconnect on intentional close
-        wsRef.current.close()
-        wsRef.current = null
-      }
+      releaseRef.current?.()
+      releaseRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wsUrl, pollIntervalMs])
+  }, [wsUrl, pollIntervalMs, loadRest, onWsMessage])
 
   return {
     syncStatus,
