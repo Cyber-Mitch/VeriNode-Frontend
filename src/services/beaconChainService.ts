@@ -9,6 +9,7 @@ import {
   computeParticipationRate,
   type SyncCommitteePeriodData,
 } from '@/src/utils/syncCommittee'
+import { webSocketManager } from '@/src/services/webSocketManager'
 
 export type BeaconFinalityProvider = {
   fetchCheckpoint(slot: number): Promise<FinalityCheckpointInput>
@@ -73,13 +74,26 @@ export function createBeaconChainService(baseUrl: string): BeaconFinalityProvide
       }
     },
     subscribeToHead(onCheckpoint) {
-      const socket = new WebSocket(`${normalizedBaseUrl.replace(/^http/, 'ws')}/eth/v1/events?topics=head`)
-      socket.onmessage = (event) => {
-        const payload = JSON.parse(event.data) as { data?: { slot?: string | number } }
-        const slot = toNumber(payload.data?.slot)
-        if (slot > 0) this.fetchCheckpoint(slot).then(onCheckpoint).catch(console.error)
-      }
-      return () => socket.close()
+      const wsUrl = `${normalizedBaseUrl.replace(/^http/, 'ws')}/eth/v1/events?topics=head`
+      const connectionId = `beacon-head:${normalizedBaseUrl}`
+
+      const release = webSocketManager.acquireConnection({
+        connectionId,
+        url: wsUrl,
+        enabled: true,
+        onMessage: (data) => {
+          try {
+            const payload = data as { data?: { slot?: string | number } }
+            const slot = toNumber(payload.data?.slot)
+            if (slot > 0) this.fetchCheckpoint(slot).then(onCheckpoint).catch(console.error)
+          } catch {
+            // Ignore malformed frames; health scoring will still reflect uptime.
+          }
+        },
+        onError: (err) => console.error('[beaconChainService] WS error:', err),
+      })
+
+      return () => release()
     },
   }
 }

@@ -196,9 +196,13 @@ describe('useSlashingStream', () => {
       })
     )
 
-    await waitFor(() => {
-      expect(result.current.connected).toBe(true)
+    // Flush pending microtasks (React effects + mock WS onopen) so
+    // `connected` becomes true. `waitFor` deadlocks under fake timers
+    // because it relies on real-timer retries that are now frozen.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
     })
+    expect(result.current.connected).toBe(true)
 
     const event: SlashingEvent = createMockEvent('1', 'node-1', 100)
 
@@ -207,9 +211,7 @@ describe('useSlashingStream', () => {
       wsServer.simulateMessage(event)
     })
 
-    await waitFor(() => {
-      expect(result.current.events).toHaveLength(1)
-    })
+    expect(result.current.events).toHaveLength(1)
 
     // Try to send duplicate immediately - should be filtered
     act(() => {
@@ -218,9 +220,9 @@ describe('useSlashingStream', () => {
 
     expect(result.current.events).toHaveLength(1)
 
-    // Advance time past TTL
-    act(() => {
-      vi.advanceTimersByTime(1100)
+    // Advance time past TTL and flush microtasks
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1100)
     })
 
     // Send the same event again after TTL expires - should be allowed
@@ -228,9 +230,7 @@ describe('useSlashingStream', () => {
       wsServer.simulateMessage(event)
     })
 
-    await waitFor(() => {
-      expect(result.current.events).toHaveLength(2)
-    })
+    expect(result.current.events).toHaveLength(2)
 
     vi.useRealTimers()
   })
@@ -262,7 +262,7 @@ class MockWebSocketServer {
   simulateDisconnect() {
     this.clients.forEach((client) => {
       client.readyState = 3 // CLOSED
-      client.onclose?.(new CloseEvent('close'))
+      client.onclose?.(new CloseEvent('close', { code: 1000, reason: 'mock-disconnect' }))
     })
   }
 

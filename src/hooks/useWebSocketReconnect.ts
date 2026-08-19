@@ -1,28 +1,27 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { webSocketManager } from '@/services/webSocketManager'
 
 interface UseWebSocketReconnectOptions {
   url: string
   enabled?: boolean
-  reconnectDelayMs?: number
-  maxReconnectAttempts?: number
+  /**
+   * Stable identifier used for multi-connection health scoring.
+   * When omitted, defaults to `url`.
+   */
+  connectionId?: string
   onMessage?: (data: unknown, headers: Record<string, string>) => void
   onConnected?: () => void
   onDisconnected?: () => void
   onError?: (error: string) => void
 }
 
-interface WebSocketHeaders {
-  'x-last-event-id'?: string
-  'x-catchup-from'?: string
-}
-
 /**
  * Hook to manage WebSocket connection with automatic reconnection and catch-up support.
  *
  * Features:
- * - Automatic reconnection with exponential backoff
+ * - Automatic reconnection with tiered strategy (health scoring)
  * - Sends last received event ID to server on reconnect
  * - Handles catch-up burst from server (x-catchup-from header)
  * - Deduplication through event ID headers
@@ -30,122 +29,93 @@ interface WebSocketHeaders {
 export function useWebSocketReconnect({
   url,
   enabled = true,
-  reconnectDelayMs = 5000,
-  maxReconnectAttempts = 10,
+  connectionId,
   onMessage,
   onConnected,
   onDisconnected,
   onError,
 }: UseWebSocketReconnectOptions) {
+  // -------------------------
+  // State
+  // -------------------------
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const wsRef = useRef<WebSocket | null>(null)
-  const reconnectTimerRef = useRef<NodeJS.Timeout | undefined>()
-  const reconnectAttemptsRef = useRef(0)
-  const closedRef = useRef(false)
+  // -------------------------
+  // Connection helpers
+  // -------------------------
   const lastEventIdRef = useRef<string | null>(null)
+  const releaseRef = useRef<null | (() => void)>(null)
 
-  const handleError = useCallback(
-    (errMsg: string) => {
-      setError(errMsg)
-      onError?.(errMsg)
-    },
-    [onError]
-  )
+  // Keep latest callbacks without reconnecting the socket.
+  const onMessageRef = useRef(onMessage)
+  const onConnectedRef = useRef(onConnected)
+  const onDisconnectedRef = useRef(onDisconnected)
+  const onErrorRef = useRef(onError)
 
-  const connect = useCallback(() => {
-    if (closedRef.current || !enabled || !url) return
+  useEffect(() => {
+    onMessageRef.current = onMessage
+    onConnectedRef.current = onConnected
+    onDisconnectedRef.current = onDisconnected
+    onErrorRef.current = onError
+  }, [onMessage, onConnected, onDisconnected, onError])
 
-    if (reconnectAttemptsRef.current > maxReconnectAttempts) {
-      handleError('Max reconnection attempts exceeded')
-      return
-    }
+  useEffect(() => {
+    if (!enabled || !url) return
+    if (typeof window === 'undefined') return
 
-    try {
-      wsRef.current = new WebSocket(url)
+    const effectiveConnectionId = connectionId ?? url
 
-      wsRef.current.onopen = () => {
-        reconnectAttemptsRef.current = 0
+    releaseRef.current?.()
+    releaseRef.current = webSocketManager.acquireConnection({
+      connectionId: effectiveConnectionId,
+      url,
+      enabled: true,
+      onMessage: (data, headers) => {
+        if (data && typeof data === 'object' && 'id' in (data as Record<string, unknown>)) {
+          const id = (data as Record<string, unknown>).id
+          if (typeof id === 'string') lastEventIdRef.current = id
+        }
+        onMessageRef.current?.(data, headers)
+      },
+      onConnected: () => {
         setConnected(true)
         setError(null)
-        onConnected?.()
-
-        // Send last event ID to server for catch-up logic
-        if (lastEventIdRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(
+        onConnectedRef.current?.()
+      },
+      onDisconnected: () => {
+        setConnected(false)
+        onDisconnectedRef.current?.()
+      },
+      onError: (errMsg) => {
+        setError(errMsg)
+        onErrorRef.current?.(errMsg)
+      },
+      onOpen: (ws) => {
+        const openState = typeof WebSocket.OPEN === 'number' ? WebSocket.OPEN : 1
+        if (lastEventIdRef.current && ws.readyState === openState) {
+          ws.send(
             JSON.stringify({
               type: 'sync',
               lastEventId: lastEventIdRef.current,
-            })
+            }),
           )
         }
-      }
+      },
+    })
 
-      wsRef.current.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-
-          // Extract headers from message or from WebSocket headers
-          const headers: Record<string, string> = {}
-          if (event.data.includes('x-last-event-id')) {
-            const match = event.data.match(/"x-last-event-id":"([^"]+)"/)
-            if (match) headers['x-last-event-id'] = match[1]
-          }
-          if (event.data.includes('x-catchup-from')) {
-            const match = event.data.match(/"x-catchup-from":"([^"]+)"/)
-            if (match) headers['x-catchup-from'] = match[1]
-          }
-
-          // Update last event ID if provided
-          if (data.id) {
-            lastEventIdRef.current = data.id
-          }
-
-          onMessage?.(data, headers)
-        } catch (err) {
-          handleError(`Failed to parse message: ${err}`)
-        }
-      }
-
-      wsRef.current.onclose = () => {
-        wsRef.current = null
-        setConnected(false)
-        onDisconnected?.()
-
-        if (!closedRef.current) {
-          reconnectAttemptsRef.current += 1
-          const delay = Math.min(reconnectDelayMs * Math.pow(2, reconnectAttemptsRef.current - 1), 30000)
-          connectRef.current()
-        }
-      }
-
-      wsRef.current.onerror = () => {
-        // Error is handled by onclose
-      }
-    } catch (err) {
-      handleError(`WebSocket connection failed: ${err}`)
+    return () => {
+      releaseRef.current?.()
+      releaseRef.current = null
     }
-  }, [url, enabled, reconnectDelayMs, maxReconnectAttempts, onMessage, onConnected, onDisconnected, handleError])
+  }, [url, enabled, connectionId])
 
-  const connectRef = useRef(connect)
-  // eslint-disable-next-line react-hooks/immutability
-  useEffect(() => { connectRef.current = connect }, [connect])
-
-  // Initialize connection
-  const setupRef = useRef(false)
-  if (enabled && url && !setupRef.current && typeof window !== 'undefined') {
-    setupRef.current = true
-    closedRef.current = false
-    connect()
+  // Stable cleanup function for existing callers.
+  const cleanup = () => {
+    releaseRef.current?.()
+    releaseRef.current = null
+    setConnected(false)
   }
-
-  // Cleanup
-  const cleanup = useCallback(() => {
-    closedRef.current = true
-    if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
-    if (wsRef.current) wsRef.current.close()
-  }, [])
 
   return {
     connected,

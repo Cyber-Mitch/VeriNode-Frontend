@@ -5,11 +5,11 @@ import type { SlashingEvent, UseSlashingStreamOptions, UseSlashingStreamResult }
 import { useWebSocketReconnect } from './useWebSocketReconnect'
 
 const DEFAULT_DEDUP_WINDOW_MS = 300000 // 5 minutes
-const CLEANUP_INTERVAL_MS = 60000 // Clean up every minute
 const MAX_EVENTS = 1000 // Maximum events to keep in memory
 
 interface ReceivedEventEntry {
-  timestamp: number
+  timestampMs: number
+  perfTimestampMs: number
 }
 
 function isSlashingEvent(value: unknown): value is SlashingEvent {
@@ -48,26 +48,46 @@ export function useSlashingStream({
   const [error, setError] = useState<string | null>(null)
   const [lastEventId, setLastEventId] = useState<string | null>(null)
 
-  // Clean up expired event IDs based on TTL
-  const cleanupExpiredIds = useCallback(() => {
-    const now = Date.now()
-    const receivedIds = receivedIdsRef.current
-
-    for (const [eventId, entry] of receivedIds.entries()) {
-      if (now - entry.timestamp > dedupWindowMs) {
-        receivedIds.delete(eventId)
-      }
-    }
-  }, [dedupWindowMs])
+  const receivedIdsRef = useRef<Map<string, ReceivedEventEntry>>(new Map())
 
   // Check if event ID has already been received
-  const isDuplicate = useCallback((eventId: string): boolean => {
-    return receivedIdsRef.current.has(eventId)
-  }, [])
+  const isDuplicate = useCallback(
+    (eventId: string): boolean => {
+      const entry = receivedIdsRef.current.get(eventId)
+      if (!entry) return false
+
+      const nowMs = Date.now()
+      const nowPerfMs = typeof performance !== 'undefined' ? performance.now() : nowMs
+
+      const expired =
+        nowMs - entry.timestampMs > dedupWindowMs ||
+        nowPerfMs - entry.perfTimestampMs > dedupWindowMs
+
+      if (expired) {
+        receivedIdsRef.current.delete(eventId)
+        return false
+      }
+
+      return true
+    },
+    [dedupWindowMs],
+  )
 
   // Add event ID to received set
-  const markAsReceived = useCallback((eventId: string) => {
-    receivedIdsRef.current.set(eventId, { timestamp: Date.now() })
+  const markAsReceived = useCallback(
+    (eventId: string) => {
+      const tsMs = Date.now()
+      const perfTsMs = typeof performance !== 'undefined' ? performance.now() : tsMs
+      receivedIdsRef.current.set(eventId, { timestampMs: tsMs, perfTimestampMs: perfTsMs })
+    },
+    [],
+  )
+
+  // Cleanup cache on unmount to avoid cross-test interference.
+  useEffect(() => {
+    return () => {
+      receivedIdsRef.current.clear()
+    }
   }, [])
 
   // Handle incoming slashing events
@@ -81,7 +101,6 @@ export function useSlashingStream({
 
         // Check for duplicate using received event ID set
         if (isDuplicate(data.id)) {
-          console.debug(`Duplicate slashing event ignored: ${data.id}`)
           return
         }
 
@@ -90,12 +109,6 @@ export function useSlashingStream({
         setLastEventId(data.id)
 
         setEvents((prevEvents) => {
-          // Double-check: ensure event is not already in the list
-          // (React render key dedup + array filter)
-          if (prevEvents.some((e) => e.id === data.id)) {
-            return prevEvents
-          }
-
           const newEvents = [data, ...prevEvents]
 
           // Trim to max events
@@ -116,9 +129,9 @@ export function useSlashingStream({
 
   // WebSocket reconnect hook with catch-up support
   const { connected } = useWebSocketReconnect({
-    url: enabled ? url : '',
+    url,
     enabled,
-    reconnectDelayMs: 5000,
+    connectionId: `slashing:${url}`,
     onMessage: (data) => {
       handleMessage(data)
     },
@@ -131,19 +144,6 @@ export function useSlashingStream({
   useEffect(() => {
     onEvents?.(events)
   }, [events, onEvents])
-
-  // Set up cleanup interval for expired event IDs
-  useEffect(() => {
-    if (!enabled) return
-
-    cleanupTimerRef.current = setInterval(cleanupExpiredIds, CLEANUP_INTERVAL_MS)
-
-    return () => {
-      if (cleanupTimerRef.current) {
-        clearInterval(cleanupTimerRef.current)
-      }
-    }
-  }, [enabled, cleanupExpiredIds])
 
   return {
     events,
