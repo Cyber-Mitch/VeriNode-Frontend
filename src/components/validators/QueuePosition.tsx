@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 const GAUGE_R = 46
 const GAUGE_CIRCUMFERENCE = 2 * Math.PI * GAUGE_R
@@ -28,9 +28,19 @@ export function QueuePosition({
 
   const dashOffset = GAUGE_CIRCUMFERENCE - ratio * GAUGE_CIRCUMFERENCE
 
+  // Stable `now` updated every minute so useMemo never calls Date.now() during render.
+  const [now, setNow] = useState(() => Date.now())
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  useEffect(() => {
+    intervalRef.current = setInterval(() => setNow(Date.now()), 60_000)
+    return () => {
+      if (intervalRef.current !== null) clearInterval(intervalRef.current)
+    }
+  }, [])
+
   const eta = useMemo(() => {
     if (projectedExitTimestamp === null) return null
-    const ms = projectedExitTimestamp - Date.now()
+    const ms = projectedExitTimestamp - now
     if (ms <= 0) return 'imminent'
     const minutes = ms / 60_000
     if (minutes < 60) return `${Math.round(minutes)} min`
@@ -38,7 +48,7 @@ export function QueuePosition({
     if (hours < 48) return `${hours.toFixed(1)} h`
     const days = hours / 24
     return `${days.toFixed(1)} d`
-  }, [projectedExitTimestamp])
+  }, [projectedExitTimestamp, now])
 
   // Color: green when near front, amber mid-queue, red at the back.
   const color = ratio < 0.2 ? '#22c55e' : ratio < 0.6 ? '#f59e0b' : '#ef4444'
