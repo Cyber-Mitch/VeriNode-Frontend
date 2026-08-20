@@ -1,208 +1,150 @@
-'use client'
+'use client';
 
-import React, { useState } from 'react'
-import { useGovernanceStore } from '@/src/store/governanceStore'
-import type { Delegate } from '@/src/types/governance'
+/**
+ * DelegateManager
+ * 
+ * Component for delegating voting power, revoking delegation, searching verified
+ * delegates, viewing participation statistics, and custom address delegation.
+ */
 
-function truncateAddress(addr: string) {
-  if (!addr || addr.length <= 12) return addr
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`
-}
+import React, { useState, useMemo } from 'react';
+import type { Delegate } from '@/src/types/governance';
+import { useDelegates, useUserGovernanceProfile, useDelegate, useRevokeDelegation } from '@/src/hooks/useGovernance';
+import { useWallet } from '@/src/hooks/useWallet';
 
 export function DelegateManager() {
-  const {
-    delegates,
-    currentDelegation,
-    userVotingPower,
-    userTokenBalance,
-    delegateVotes,
-    revokeDelegation,
-  } = useGovernanceStore()
+  const { activeAccount } = useWallet();
+  const userAddress = activeAccount?.publicKey || 'GA2C5RFPE6GCKMYYLHGOSKVXT2KEQXZ3Z2Q4F3E4R5T6Y7U8I9OPQRST';
 
-  const [searchQuery, setSearchQuery] = useState('')
-  const [customAddress, setCustomAddress] = useState('')
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const { data: delegates = [], isLoading } = useDelegates();
+  const { data: profile, refetch: refetchProfile } = useUserGovernanceProfile(userAddress);
+  const delegateMutation = useDelegate();
+  const revokeMutation = useRevokeDelegation();
 
-  const activeDelegateObj = delegates.find((d) => d.address === currentDelegation)
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDelegate, setSelectedDelegate] = useState<Delegate | null>(null);
+  const [customAddress, setCustomAddress] = useState('');
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [showRevokeModal, setShowRevokeModal] = useState(false);
+  const [txSuccess, setTxSuccess] = useState<string | null>(null);
 
-  const filteredDelegates = delegates.filter((d) => {
-    if (!searchQuery.trim()) return true
-    const q = searchQuery.toLowerCase()
-    return (
-      d.name.toLowerCase().includes(q) ||
-      d.address.toLowerCase().includes(q) ||
-      (d.statement && d.statement.toLowerCase().includes(q))
-    )
-  })
+  const filteredDelegates = useMemo(() => {
+    if (!searchQuery.trim()) return delegates;
+    const q = searchQuery.toLowerCase();
+    return delegates.filter(
+      (d) =>
+        d.name.toLowerCase().includes(q) ||
+        d.address.toLowerCase().includes(q) ||
+        d.bio.toLowerCase().includes(q)
+    );
+  }, [delegates, searchQuery]);
 
-  const handleDelegate = (address: string) => {
-    setFeedback(null)
-    const res = delegateVotes(address)
-    if (res.success) {
-      setFeedback({
-        type: 'success',
-        message: `Successfully delegated ${userTokenBalance.toLocaleString()} VN voting power to ${truncateAddress(address)}!`,
-      })
-      setCustomAddress('')
-    } else {
-      setFeedback({
-        type: 'error',
-        message: res.error || 'Failed to delegate voting power',
-      })
+  const handleDelegate = async (delegateAddress: string) => {
+    try {
+      const res = await delegateMutation.mutateAsync({
+        delegatorAddress: userAddress,
+        delegateAddress,
+      });
+      setTxSuccess(res.txHash);
+      setSelectedDelegate(null);
+      setShowCustomModal(false);
+      refetchProfile();
+    } catch (err) {
+      console.error('Failed to delegate:', err);
     }
-  }
+  };
 
-  const handleRevoke = () => {
-    setFeedback(null)
-    const res = revokeDelegation()
-    if (res.success) {
-      setFeedback({
-        type: 'success',
-        message: `Successfully revoked delegation! ${userTokenBalance.toLocaleString()} VN voting power returned to your wallet.`,
-      })
-    } else {
-      setFeedback({
-        type: 'error',
-        message: res.error || 'Failed to revoke delegation',
-      })
+  const handleRevoke = async () => {
+    try {
+      const res = await revokeMutation.mutateAsync(userAddress);
+      setTxSuccess(res.txHash);
+      setShowRevokeModal(false);
+      refetchProfile();
+    } catch (err) {
+      console.error('Failed to revoke delegation:', err);
     }
-  }
-
-  const handleCustomDelegateSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!customAddress.trim()) {
-      setFeedback({ type: 'error', message: 'Please enter a valid Stellar address' })
-      return
-    }
-    handleDelegate(customAddress.trim())
-  }
+  };
 
   return (
-    <div className="space-y-6" data-testid="delegate-manager-container">
-      {/* Top Banner: Current Delegation Status */}
-      <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-8">
+      {/* Active Delegation Hero Card */}
+      <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur-xl shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-6">
           <div>
-            <h2 className="text-lg font-bold text-white">Delegation Hub</h2>
-            <p className="mt-1 text-xs text-slate-400">
-              Delegate your voting weight to active community stewards without transferring token ownership.
-            </p>
+            <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">Your Delegation Status</span>
+            <h2 className="mt-1 text-2xl font-extrabold text-white">
+              {profile?.isDelegating
+                ? `Delegated to ${profile.delegatedToName || profile.delegatedTo?.slice(0, 10)}...`
+                : 'Self-Voting (No Active Delegation)'}
+            </h2>
           </div>
-
-          <div className="flex flex-wrap items-center gap-4 text-xs">
-            <div className="rounded-xl border border-white/5 bg-slate-950/60 px-4 py-2">
-              <span className="text-slate-500">Your Token Balance:</span>
-              <p className="font-bold text-white">{userTokenBalance.toLocaleString()} VN</p>
-            </div>
-
-            <div className="rounded-xl border border-white/5 bg-slate-950/60 px-4 py-2">
-              <span className="text-slate-500">Active Direct Power:</span>
-              <p className="font-bold text-indigo-400">{userVotingPower.toLocaleString()} VN</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Current status banner */}
-        <div className="mt-6 rounded-xl border border-white/5 bg-slate-950/80 p-4">
-          {currentDelegation ? (
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-500/20 text-indigo-300 font-bold text-sm">
-                  ✓
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold text-slate-400">Currently Delegating to:</span>
-                    <span className="text-sm font-bold text-white">
-                      {activeDelegateObj ? activeDelegateObj.name : truncateAddress(currentDelegation)}
-                    </span>
-                  </div>
-                  <p className="font-mono text-xs text-indigo-400">{currentDelegation}</p>
-                </div>
-              </div>
-
+          <div className="flex items-center gap-3">
+            {profile?.isDelegating ? (
               <button
                 type="button"
-                onClick={handleRevoke}
-                className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs font-bold text-rose-300 hover:bg-rose-500/20 transition"
+                onClick={() => setShowRevokeModal(true)}
+                className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/20"
               >
                 Revoke Delegation
               </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-300 text-sm">
-                  🛡️
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">Self-Voting Mode</p>
-                  <p className="text-xs text-slate-400">
-                    You hold 100% of your voting power and cast votes directly on proposals.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowCustomModal(true)}
+                className="rounded-2xl border border-sky-500/30 bg-sky-600 px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-sky-500"
+              >
+                Delegate to Custom Address
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Feedback alert */}
-        {feedback && (
-          <div
-            className={`mt-4 rounded-xl border p-3 text-xs ${
-              feedback.type === 'success'
-                ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300'
-                : 'border-rose-500/40 bg-rose-950/40 text-rose-300'
-            }`}
-          >
-            {feedback.message}
+        {/* Profile Metrics Grid */}
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4">
+            <span className="text-xs text-slate-400">Your VRN Token Balance</span>
+            <p className="mt-1 font-mono text-lg font-bold text-white">
+              {profile?.tokenBalance.toLocaleString() || '45,000'} <span className="text-xs text-slate-400">VRN</span>
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4">
+            <span className="text-xs text-slate-400">Effective Voting Power</span>
+            <p className="mt-1 font-mono text-lg font-bold text-sky-400">
+              {profile?.isDelegating ? '0 (Delegated)' : `${profile?.votingPower.toLocaleString() || '45,000'} Power`}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4">
+            <span className="text-xs text-slate-400">Delegators Supporting You</span>
+            <p className="mt-1 font-mono text-lg font-bold text-emerald-400">
+              {profile?.delegatorCount || 0} <span className="text-xs text-slate-400">accounts</span>
+            </p>
+          </div>
+        </div>
+
+        {txSuccess && (
+          <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-300">
+            ✓ Transaction confirmed! Tx Hash: <span className="font-mono">{txSuccess.slice(0, 16)}...</span>
           </div>
         )}
       </div>
 
-      {/* Manual Delegate Custom Address */}
-      <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-5">
-        <h3 className="text-sm font-bold text-white">Delegate to Custom Address</h3>
-        <p className="mt-0.5 text-xs text-slate-400">
-          Enter any Stellar public address to delegate your voting power.
-        </p>
-
-        <form onSubmit={handleCustomDelegateSubmit} className="mt-3 flex flex-col gap-2 sm:flex-row">
-          <input
-            type="text"
-            value={customAddress}
-            onChange={(e) => setCustomAddress(e.target.value)}
-            placeholder="e.g. GD7BX8M31NP4450KLS9921VZTTTR43100981A"
-            aria-label="Custom delegate address"
-            className="flex-1 rounded-xl border border-white/10 bg-slate-950/90 px-4 py-2 text-xs font-mono text-slate-100 placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={!customAddress.trim()}
-            className="rounded-xl bg-indigo-600 px-5 py-2 text-xs font-bold text-white hover:bg-indigo-500 disabled:opacity-50 transition"
-          >
-            Delegate
-          </button>
-        </form>
-      </div>
-
-      {/* Verified Delegates Directory */}
-      <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Delegate Directory Section */}
+      <div className="space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h3 className="text-base font-bold text-white">Verified Community Stewards</h3>
-            <p className="text-xs text-slate-400">Recognized delegates with proven governance participation</p>
+            <h3 className="text-xl font-bold text-white">Verified Delegate Directory</h3>
+            <p className="text-xs text-slate-400">
+              Select an active ecosystem validator or community delegate to represent your voting power.
+            </p>
           </div>
 
-          {/* Search Delegates */}
           <div className="w-full sm:w-72">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search delegates by name or address..."
-              aria-label="Search delegates"
-              className="w-full rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-2 text-xs text-slate-100 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
+              placeholder="Search delegates by name, address..."
+              className="w-full rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-2 text-xs text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
             />
           </div>
         </div>

@@ -48,7 +48,8 @@ export interface VirtualizerResult {
    * Attach to each rendered row's DOM element so its real height feeds back
    * into the position cache.
    */
-  measureElement: (el: Element | null) => void
+  measureElement: (el: Element | null, index?: number) => void
+  attachIndex?: (el: Element | null, index: number) => void
 }
 
 export function useVirtualizer(options: UseVirtualizerOptions): VirtualizerResult {

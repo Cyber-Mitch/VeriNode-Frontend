@@ -25,16 +25,19 @@
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
     "@tanstack/react-query": "^5.101.0",
+    "@types/three": "^0.185.4",
     "chart.js": "^4.5.1",
     "chartjs-adapter-date-fns": "^3.0.0",
     "date-fns": "^4.4.0",
     "isomorphic-dompurify": "^2.36.0",
     "lightweight-charts": "^5.2.1",
+    "lunr": "^2.3.9",
     "next": "16.1.6",
     "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-chartjs-2": "^5.3.1",
     "react-dom": "19.2.3",
+    "three": "^0.185.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
@@ -45,6 +48,7 @@
     "@testing-library/dom": "^10.4.0",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^20",
+    "@types/lunr": "^2.3.7",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
