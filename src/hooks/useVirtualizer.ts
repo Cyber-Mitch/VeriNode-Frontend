@@ -200,13 +200,12 @@ export function useVirtualizer(options: UseVirtualizerOptions): VirtualizerResul
     if (el) elementIndexMap.current.set(el, index)
   }, [])
 
-  const measureElementWrapper = useCallback(
-    (el: Element | null, index: number) => {
-      if (el) elementIndexMap.current.set(el, index)
+  const measureElementWrapper = Object.assign(
+    (el: Element | null) => {
       measureElement(el)
     },
-    [measureElement],
+    { attachIndex },
   )
 
-  return { getVirtualItems, getTotalSize, measureElement: measureElementWrapper, attachIndex }
+  return { getVirtualItems, getTotalSize, measureElement: measureElementWrapper }
 }

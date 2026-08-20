@@ -37,7 +37,7 @@ async function submit(
   const { xdr } = buildStakingTransaction({ action, amount, source })
   const result = await rpcSendTransaction(xdr)
 
-  if (result.status === "confirmed") {
+  if (result.status === "confirmed" || result.status === "pending") {
     return { transactionHash: result.txHash }
   }
   if (result.status === "error") {
