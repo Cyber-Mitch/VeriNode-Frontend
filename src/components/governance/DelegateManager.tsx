@@ -149,227 +149,77 @@ export function DelegateManager() {
           </div>
         </div>
 
-        {/* Delegates Grid */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-64 animate-pulse rounded-3xl bg-slate-900/60 border border-white/5" />
-            ))}
+        {filteredDelegates.length === 0 ? (
+          <div className="rounded-2xl border border-white/5 bg-slate-900/50 p-8 text-center text-xs text-slate-400">
+            No delegates match your search query.
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {filteredDelegates.map((delegate) => {
-              const isCurrentDelegate = profile?.delegatedTo?.toLowerCase() === delegate.address.toLowerCase();
+              const isSelected = currentDelegation === delegate.address
 
               return (
                 <div
                   key={delegate.address}
-                  className="rounded-3xl border border-white/10 bg-slate-900/70 p-6 backdrop-blur-xl transition-all hover:border-sky-500/30 space-y-4"
+                  data-testid={`delegate-card-${delegate.address}`}
+                  className={`rounded-2xl border p-5 transition ${
+                    isSelected
+                      ? 'border-indigo-500/60 bg-slate-900 shadow-lg shadow-indigo-500/10'
+                      : 'border-white/10 bg-slate-900/80 hover:border-white/20'
+                  }`}
                 >
-                  {/* Delegate Header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={delegate.avatar}
-                        alt={delegate.name}
-                        className="h-12 w-12 rounded-2xl object-cover border border-white/10"
-                      />
-                      <div>
-                        <h4 className="text-base font-bold text-white">{delegate.name}</h4>
-                        <p className="font-mono text-[11px] text-slate-400">
-                          {delegate.address.slice(0, 8)}...{delegate.address.slice(-6)}
-                        </p>
-                      </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-bold text-white">{delegate.name}</h4>
+                      <p className="mt-0.5 font-mono text-xs text-indigo-400" title={delegate.address}>
+                        {truncateAddress(delegate.address)}
+                      </p>
                     </div>
 
-                    {isCurrentDelegate ? (
-                      <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400">
-                        Current Delegate
+                    {isSelected ? (
+                      <span className="rounded-full border border-indigo-500/40 bg-indigo-500/20 px-2.5 py-0.5 text-xs font-semibold text-indigo-300">
+                        Active Delegate
                       </span>
                     ) : (
                       <button
                         type="button"
-                        onClick={() => setSelectedDelegate(delegate)}
-                        className="rounded-xl border border-sky-500/30 bg-sky-600/20 px-3 py-1.5 text-xs font-bold text-sky-400 transition-colors hover:bg-sky-600 hover:text-white"
+                        onClick={() => handleDelegate(delegate.address)}
+                        className="rounded-xl border border-white/10 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-200 hover:border-indigo-500 hover:bg-indigo-600 hover:text-white transition"
                       >
                         Delegate Power
                       </button>
                     )}
                   </div>
 
-                  {/* Bio */}
-                  <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">{delegate.bio}</p>
+                  {delegate.statement && (
+                    <p className="mt-3 text-xs leading-relaxed text-slate-400">
+                      {delegate.statement}
+                    </p>
+                  )}
 
-                  {/* Stats Grid */}
-                  <div className="grid grid-cols-3 gap-2 rounded-2xl border border-white/5 bg-slate-950/60 p-3 text-center">
+                  {/* Delegate metrics grid */}
+                  <div className="mt-4 grid grid-cols-3 gap-2 rounded-xl border border-white/5 bg-slate-950/60 p-3 text-center text-[11px]">
                     <div>
-                      <span className="text-[10px] uppercase text-slate-400">Voting Power</span>
-                      <p className="mt-0.5 font-mono text-xs font-bold text-white">
-                        {(delegate.votingPower / 1000).toFixed(0)}k <span className="text-slate-400">({delegate.votingPowerPercent}%)</span>
+                      <span className="text-slate-500">Voting Power</span>
+                      <p className="mt-0.5 font-bold text-slate-200">
+                        {delegate.votingPower.toLocaleString()}
                       </p>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase text-slate-400">Delegators</span>
-                      <p className="mt-0.5 font-mono text-xs font-bold text-white">{delegate.delegatorCount}</p>
+                      <span className="text-slate-500">Delegators</span>
+                      <p className="mt-0.5 font-bold text-slate-200">{delegate.delegatorsCount}</p>
                     </div>
                     <div>
-                      <span className="text-[10px] uppercase text-slate-400">Participation</span>
-                      <p className="mt-0.5 font-mono text-xs font-bold text-emerald-400">{delegate.participationRate}%</p>
+                      <span className="text-slate-500">Participation</span>
+                      <p className="mt-0.5 font-bold text-emerald-400">{delegate.participationRate}%</p>
                     </div>
                   </div>
-
-                  {/* Recent Votes */}
-                  {delegate.recentVotes.length > 0 && (
-                    <div className="space-y-1.5 pt-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Recent Voting Stance</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {delegate.recentVotes.map((v, i) => (
-                          <span
-                            key={i}
-                            className={`rounded-md px-2 py-0.5 text-[10px] font-semibold ${
-                              v.choice === 'for'
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                            }`}
-                          >
-                            {v.proposalId}: {v.choice.toUpperCase()}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
-              );
+              )
             })}
           </div>
         )}
       </div>
-
-      {/* Delegate Confirmation Modal */}
-      {selectedDelegate && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-md"
-        >
-          <div className="w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Confirm Delegation</h3>
-            <p className="text-xs text-slate-300">
-              You are about to delegate all your voting power ({profile?.tokenBalance.toLocaleString()} VRN) to{' '}
-              <span className="font-bold text-white">{selectedDelegate.name}</span>.
-            </p>
-
-            <div className="rounded-2xl bg-slate-950 p-4 text-xs space-y-2 text-slate-300">
-              <div className="flex justify-between">
-                <span className="text-slate-400">Delegate Address</span>
-                <span className="font-mono text-white">{selectedDelegate.address.slice(0, 10)}...{selectedDelegate.address.slice(-6)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Estimated Gas</span>
-                <span className="font-mono text-slate-300">42,000 Gwei (≈ $0.10)</span>
-              </div>
-            </div>
-
-            <p className="text-[11px] text-slate-400">
-              Delegation transfers voting rights only. Your tokens never leave your wallet and you can revoke or reassign at any time.
-            </p>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setSelectedDelegate(null)}
-                className="rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelegate(selectedDelegate.address)}
-                disabled={delegateMutation.isPending}
-                className="rounded-xl border border-sky-500/30 bg-sky-600 px-5 py-2 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-50"
-              >
-                {delegateMutation.isPending ? 'Delegating...' : 'Confirm Delegation'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Custom Address Modal */}
-      {showCustomModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-md"
-        >
-          <div className="w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Delegate to Custom Address</h3>
-            <p className="text-xs text-slate-300">
-              Enter any valid Stellar / Soroban address (e.g. G...) to delegate your voting power.
-            </p>
-
-            <input
-              type="text"
-              value={customAddress}
-              onChange={(e) => setCustomAddress(e.target.value)}
-              placeholder="G..."
-              className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 font-mono text-xs text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
-            />
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowCustomModal(false)}
-                className="rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDelegate(customAddress)}
-                disabled={!customAddress.trim() || delegateMutation.isPending}
-                className="rounded-xl border border-sky-500/30 bg-sky-600 px-5 py-2 text-xs font-bold text-white hover:bg-sky-500 disabled:opacity-50"
-              >
-                {delegateMutation.isPending ? 'Delegating...' : 'Delegate Power'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Revoke Modal */}
-      {showRevokeModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-md"
-        >
-          <div className="w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-lg font-bold text-white">Revoke Delegation</h3>
-            <p className="text-xs text-slate-300">
-              Are you sure you want to revoke your delegation? Your voting power will be restored to your wallet for direct self-voting.
-            </p>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowRevokeModal(false)}
-                className="rounded-xl border border-white/10 bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleRevoke}
-                disabled={revokeMutation.isPending}
-                className="rounded-xl border border-rose-500/30 bg-rose-600 px-5 py-2 text-xs font-bold text-white hover:bg-rose-500 disabled:opacity-50"
-              >
-                {revokeMutation.isPending ? 'Revoking...' : 'Confirm Revocation'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
-  );
+  )
 }

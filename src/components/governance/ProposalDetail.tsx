@@ -1,383 +1,479 @@
-'use client';
+'use client'
 
-/**
- * ProposalDetail
- * 
- * Comprehensive proposal view featuring:
- * - Proposal metadata and lifecycle badges
- * - Sanitized Markdown description with formatting
- * - On-chain action calldata & parameter simulation with state diffs
- * - Vote distribution donut chart and top voter table
- * - Interactive voting panel with quadratic / token-weighted power slider
- * - Community debate & discussion feed with stance markers
- */
-
-import React, { useState } from 'react';
-import { useProposal, useDebateComments, usePostComment } from '@/src/hooks/useGovernance';
-import { useWallet } from '@/src/hooks/useWallet';
-import { MarkdownRenderer } from './MarkdownRenderer';
-import { VoteDistributionChart } from './VoteDistributionChart';
-import { VotePanel } from './VotePanel';
+import React, { useState } from 'react'
+import {
+  useGovernanceStore,
+  calculateQuorumProgress,
+  calculateEffectiveWeight,
+} from '@/src/store/governanceStore'
+import type { Proposal, VoteChoice } from '@/src/types/governance'
 
 interface ProposalDetailProps {
-  proposalId: string;
-  onBack: () => void;
+  proposalId?: string | null
+  onBack?: () => void
+}
+
+function getStatusBadge(status: Proposal['status']) {
+  switch (status) {
+    case 'active':
+      return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+    case 'passed':
+      return 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+    case 'defeated':
+      return 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+    case 'queued':
+      return 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+    case 'executed':
+      return 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+    default:
+      return 'bg-slate-700/50 text-slate-300 border-slate-600'
+  }
 }
 
 export function ProposalDetail({ proposalId, onBack }: ProposalDetailProps) {
-  const { data: proposal, isLoading, isError, error, refetch } = useProposal(proposalId);
-  const { data: comments = [], refetch: refetchComments } = useDebateComments(proposalId);
-  const postCommentMutation = usePostComment();
-  const { activeAccount } = useWallet();
+  const {
+    proposals,
+    selectedProposalId,
+    userVotingPower,
+    userAddress,
+    castVote,
+    selectProposal,
+  } = useGovernanceStore()
 
-  const [commentStance, setCommentStance] = useState<'for' | 'against' | 'neutral'>('neutral');
-  const [commentContent, setCommentContent] = useState('');
-  const [showCalldataRaw, setShowCalldataRaw] = useState(false);
+  const targetId = proposalId ?? selectedProposalId
+  const proposal = proposals.find((p) => p.id === targetId)
 
-  const handlePostComment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!commentContent.trim() || !proposal) return;
+  // Vote form state
+  const [selectedChoice, setSelectedChoice] = useState<VoteChoice>('for')
+  const [allocatedPower, setAllocatedPower] = useState<number>(userVotingPower || 1000)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [voteFeedback, setVoteFeedback] = useState<{ type: 'success' | 'error'; message: string; txHash?: string } | null>(null)
 
-    const author = activeAccount?.publicKey || 'GA2C5RFPE6GCKMYYLHGOSKVXT2KEQXZ3Z2Q4F3E4R5T6Y7U8I9OPQRST';
-    const authorName = `${author.slice(0, 6)}...${author.slice(-4)}`;
-
-    try {
-      await postCommentMutation.mutateAsync({
-        proposalId: proposal.id,
-        author,
-        authorName,
-        stance: commentStance,
-        content: commentContent.trim(),
-      });
-      setCommentContent('');
-      refetchComments();
-    } catch (err) {
-      console.error('Failed to post comment:', err);
-    }
-  };
-
-  if (isLoading) {
+  if (!proposal) {
     return (
-      <div className="space-y-6">
-        <div className="h-8 w-32 animate-pulse rounded-lg bg-slate-800" />
-        <div className="h-64 animate-pulse rounded-3xl bg-slate-900/60 border border-white/5" />
-        <div className="h-96 animate-pulse rounded-3xl bg-slate-900/60 border border-white/5" />
-      </div>
-    );
-  }
-
-  if (isError || !proposal) {
-    return (
-      <div className="space-y-4">
+      <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-8 text-center" data-testid="proposal-detail-empty">
+        <p className="text-base text-slate-300">No proposal selected</p>
         <button
           type="button"
-          onClick={onBack}
-          className="text-xs font-semibold text-sky-400 hover:underline"
+          onClick={() => {
+            selectProposal(null)
+            onBack?.()
+          }}
+          className="mt-4 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500"
         >
-          ← Back to Proposals
+          Return to Proposals
         </button>
-        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-6 text-sm text-rose-400">
-          Failed to load proposal: {error instanceof Error ? error.message : 'Proposal not found.'}
-        </div>
       </div>
-    );
+    )
+  }
+
+  const quorum = calculateQuorumProgress(proposal)
+  const isQuadratic = proposal.votingType === 'quadratic'
+  const effectiveWeight = calculateEffectiveWeight(allocatedPower, proposal.votingType)
+  const isProposalActive = proposal.status === 'active'
+
+  const handlePercentagePreset = (pct: number) => {
+    const power = Math.max(1, Math.floor((userVotingPower * pct) / 100))
+    setAllocatedPower(power)
+  }
+
+  const handleVoteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isProposalActive) return
+
+    setIsSubmitting(true)
+    setVoteFeedback(null)
+
+    try {
+      const res = castVote(proposal.id, selectedChoice, allocatedPower)
+      if (res.success) {
+        setVoteFeedback({
+          type: 'success',
+          message: `Vote successfully cast as "${selectedChoice.toUpperCase()}" with ${effectiveWeight.toLocaleString()} effective votes!`,
+          txHash: res.txHash,
+        })
+      } else {
+        setVoteFeedback({
+          type: 'error',
+          message: res.error || 'Failed to submit vote',
+        })
+      }
+    } catch {
+      setVoteFeedback({
+        type: 'error',
+        message: 'An unexpected error occurred during voting.',
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
-    <div className="space-y-8">
-      {/* Back Button & Breadcrumbs */}
+    <div className="space-y-6" data-testid="proposal-detail-container">
+      {/* Back button & top bar */}
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={onBack}
-          className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-800 hover:text-white"
+          onClick={() => {
+            selectProposal(null)
+            onBack?.()
+          }}
+          className="flex items-center gap-2 rounded-lg border border-white/10 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-300 hover:border-white/20 hover:bg-slate-800 hover:text-white"
         >
-          <span>←</span> Back to Proposals
+          ← Back to proposals
         </button>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-slate-800 px-3 py-1 text-xs font-medium text-slate-300">
-            Deposit: {proposal.deposit} VRN
-          </span>
-        </div>
-      </div>
-
-      {/* Hero Header Card */}
-      <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur-xl shadow-2xl space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs font-bold text-sky-400">{proposal.id}</span>
-          <span className="rounded-md bg-slate-800 px-2.5 py-0.5 text-xs font-medium text-slate-300">
-            {proposal.category}
-          </span>
-          <span className="rounded-md bg-slate-800/60 px-2.5 py-0.5 text-xs text-slate-400 capitalize">
-            {proposal.type} Voting
-          </span>
+          <span className="font-mono text-xs text-indigo-400">{proposal.id}</span>
           <span
-            className={`rounded-full px-3 py-0.5 text-xs font-semibold uppercase ${
-              proposal.status === 'active'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                : proposal.status === 'passed'
-                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-                : proposal.status === 'queued'
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                : proposal.status === 'executed'
-                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-            }`}
+            className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold uppercase tracking-wider ${getStatusBadge(
+              proposal.status,
+            )}`}
           >
             {proposal.status}
           </span>
         </div>
-
-        <h1 className="text-2xl font-extrabold text-white sm:text-3xl leading-tight">
-          {proposal.title}
-        </h1>
-
-        {/* Proposer Info and Timeline */}
-        <div className="flex flex-wrap items-center gap-6 border-t border-white/10 pt-4 text-xs text-slate-400">
-          <div>
-            <span className="text-slate-500">Proposer: </span>
-            <span className="font-medium text-white">{proposal.proposerName || 'Community Proposer'}</span>{' '}
-            <span className="font-mono text-slate-500">({proposal.proposer.slice(0, 8)}...{proposal.proposer.slice(-4)})</span>
-          </div>
-          <div>
-            <span className="text-slate-500">Voting Period: </span>
-            <span className="text-slate-200">
-              {new Date(proposal.startTime).toLocaleDateString()} — {new Date(proposal.endTime).toLocaleDateString()}
-            </span>
-          </div>
-          {proposal.executionEta && (
-            <div>
-              <span className="text-slate-500">Execution ETA: </span>
-              <span className="font-medium text-amber-300">{new Date(proposal.executionEta).toLocaleString()}</span>
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Main Grid: Description & Simulation on Left, Voting & Chart on Right */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
-        {/* Left Column: Markdown Details & Calldata Simulation */}
-        <div className="space-y-8 lg:col-span-7">
-          {/* Proposal Description */}
-          <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur-xl">
-            <h3 className="mb-4 text-lg font-bold text-white border-b border-white/10 pb-2">
-              Proposal Details
-            </h3>
-            <MarkdownRenderer content={proposal.description} />
+      {/* Main Header & Overview Card */}
+      <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 space-y-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+            <span className="rounded-md bg-slate-800 px-2 py-0.5 capitalize text-slate-300">
+              {proposal.category.replace('-', ' ')}
+            </span>
+            <span>•</span>
+            <span className="rounded-md bg-slate-800 px-2 py-0.5 text-slate-300">
+              {isQuadratic ? '⚡ Quadratic Voting' : '⚖️ Token-Weighted Voting'}
+            </span>
+            <span>•</span>
+            <span>Created {new Date(proposal.createdAt).toLocaleDateString()}</span>
           </div>
 
-          {/* On-chain Parameters & Simulation Diffs */}
-          {proposal.actions && proposal.actions.length > 0 && (
-            <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur-xl space-y-5">
-              <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                <div>
-                  <h3 className="text-lg font-bold text-white">On-Chain Parameter Simulation</h3>
-                  <p className="text-xs text-slate-400">Dry-run state diff projection</p>
+          <h1 className="mt-2 text-xl font-bold text-white sm:text-2xl">
+            {proposal.title}
+          </h1>
+        </div>
+
+        {/* Metadata info grid */}
+        <div className="grid grid-cols-2 gap-4 rounded-xl border border-white/5 bg-slate-950/60 p-4 sm:grid-cols-4 text-xs">
+          <div>
+            <span className="text-slate-500">Proposer</span>
+            <p className="mt-0.5 font-mono text-slate-200 truncate" title={proposal.proposer}>
+              {proposal.proposer.slice(0, 6)}...{proposal.proposer.slice(-4)}
+            </p>
+          </div>
+          <div>
+            <span className="text-slate-500">Deposit Locked</span>
+            <p className="mt-0.5 font-semibold text-slate-200">{proposal.deposit.toLocaleString()} VN</p>
+          </div>
+          <div>
+            <span className="text-slate-500">Voting Window</span>
+            <p className="mt-0.5 font-mono text-slate-200">
+              #{proposal.startBlock} - #{proposal.endBlock}
+            </p>
+          </div>
+          <div>
+            <span className="text-slate-500">Quorum Target</span>
+            <p className="mt-0.5 font-semibold text-slate-200">
+              {proposal.quorum.toLocaleString()} votes
+            </p>
+          </div>
+        </div>
+
+        {/* User existing vote banner if present */}
+        {proposal.userVote && (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-3 text-xs text-emerald-300">
+            <span className="font-semibold">Your Vote:</span> You have already voted{' '}
+            <span className="font-bold uppercase tracking-wider underline">
+              {proposal.userVote}
+            </span>{' '}
+            on this proposal.
+          </div>
+        )}
+
+        {/* Execution details if queued or executed */}
+        {proposal.status === 'executed' && proposal.executionTxHash && (
+          <div className="rounded-xl border border-purple-500/30 bg-purple-950/20 p-3 text-xs text-purple-300">
+            <span className="font-semibold">Executed On-Chain:</span> Tx Hash:{' '}
+            <span className="font-mono text-purple-200 break-all">{proposal.executionTxHash}</span>
+          </div>
+        )}
+
+        {proposal.status === 'queued' && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-300">
+            <span className="font-semibold">Queued for Timelock:</span> Timelock execution window pending.
+          </div>
+        )}
+
+        {/* Rendered proposal description */}
+        <div className="border-t border-white/5 pt-4">
+          <h2 className="text-sm font-semibold text-slate-200">Proposal Description</h2>
+          <div className="mt-2 space-y-2 text-sm leading-relaxed text-slate-300 whitespace-pre-line">
+            {proposal.description}
+          </div>
+        </div>
+
+        {/* Proposed Parameter Actions */}
+        {proposal.actions && proposal.actions.length > 0 && (
+          <div className="border-t border-white/5 pt-4">
+            <h2 className="text-sm font-semibold text-slate-200">Proposed Actions & Parameters</h2>
+            <div className="mt-3 space-y-3">
+              {proposal.actions.map((act, index) => (
+                <div
+                  key={act.id || index}
+                  className="rounded-xl border border-white/5 bg-slate-950/80 p-3 text-xs font-mono"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-indigo-300 font-semibold">
+                    <span>Action #{index + 1}: {act.functionName}()</span>
+                    {act.value && <span className="text-emerald-400 font-normal">{act.value}</span>}
+                  </div>
+                  <div className="mt-2 text-slate-400 break-all">
+                    <span className="text-slate-500">Target Contract: </span>
+                    {act.target}
+                  </div>
+                  <div className="mt-1 text-slate-400 break-all">
+                    <span className="text-slate-500">Parameters: </span>
+                    <span className="text-slate-200">{act.parameters}</span>
+                  </div>
                 </div>
-                <span className="rounded-full bg-emerald-500/20 border border-emerald-500/30 px-3 py-1 text-xs font-bold text-emerald-400">
-                  ✓ Simulation Succeeded
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Grid: Quorum & Vote Metrics (Left) + Vote Action Panel (Right) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        {/* Voting Metrics & Progress */}
+        <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 space-y-5">
+          <h2 className="text-base font-semibold text-white">Current Vote Standing</h2>
+
+          {/* Quorum Progress Box */}
+          <div className="rounded-xl border border-white/5 bg-slate-950/60 p-4 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400 font-medium">Quorum Threshold</span>
+              <span className="font-bold text-slate-200">
+                {quorum.currentVotes.toLocaleString()} / {quorum.quorum.toLocaleString()} ({quorum.percentage}%)
+              </span>
+            </div>
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-800">
+              <div
+                className={`h-full rounded-full transition-all duration-300 ${
+                  quorum.quorumReached ? 'bg-emerald-500' : 'bg-indigo-500'
+                }`}
+                style={{ width: `${quorum.percentage}%` }}
+              />
+            </div>
+            <p className="text-xs text-slate-400">
+              {quorum.quorumReached ? (
+                <span className="text-emerald-400 font-medium">✓ Quorum reached</span>
+              ) : (
+                <span className="text-amber-400 font-medium">
+                  ⏳ {(quorum.quorum - quorum.currentVotes).toLocaleString()} more votes needed for quorum
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* Detailed vote bars */}
+          <div className="space-y-4">
+            {/* For Votes */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-emerald-400">For (Yes)</span>
+                <span className="font-mono text-slate-200">
+                  {proposal.forVotes.toLocaleString()} votes ({quorum.forPercentage}%)
                 </span>
               </div>
-
-              {/* Actions List */}
-              <div className="space-y-3">
-                {proposal.actions.map((act) => (
-                  <div key={act.id} className="rounded-2xl border border-white/5 bg-slate-950/60 p-4 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-sky-400">{act.functionName}()</span>
-                      <span className="font-mono text-[10px] text-slate-500">Target: {act.targetContract.slice(0, 10)}...</span>
-                    </div>
-                    <p className="text-xs text-slate-300">{act.description}</p>
-
-                    {/* Parameters Table */}
-                    <div className="mt-2 rounded-xl bg-slate-900/90 p-2.5 font-mono text-[11px] space-y-1">
-                      {Object.entries(act.parameters).map(([key, val]) => (
-                        <div key={key} className="flex justify-between text-slate-400">
-                          <span className="text-slate-300">{key}:</span>
-                          <span className="text-emerald-400">{String(val)}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Calldata toggle */}
-                    <div className="pt-1">
-                      <button
-                        type="button"
-                        onClick={() => setShowCalldataRaw(!showCalldataRaw)}
-                        className="text-[11px] text-slate-500 hover:text-slate-300"
-                      >
-                        {showCalldataRaw ? 'Hide Raw Calldata' : 'View Raw Calldata'}
-                      </button>
-                      {showCalldataRaw && (
-                        <div className="mt-2 overflow-x-auto rounded-lg bg-black/80 p-2 font-mono text-[10px] text-slate-400 break-all">
-                          {act.calldata}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* State Diffs */}
-              {proposal.simulation.stateDiffs.length > 0 && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Projected State Diffs</h4>
-                  <div className="overflow-x-auto rounded-2xl border border-white/5 bg-slate-950/40">
-                    <table className="w-full text-left text-xs text-slate-300">
-                      <thead className="border-b border-white/5 bg-slate-900/60 uppercase tracking-wider text-[10px] text-slate-400">
-                        <tr>
-                          <th className="px-3 py-2">Parameter</th>
-                          <th className="px-3 py-2">Current State</th>
-                          <th className="px-3 py-2">Projected State</th>
-                          <th className="px-3 py-2">Impact</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5 font-mono text-[11px]">
-                        {proposal.simulation.stateDiffs.map((diff, i) => (
-                          <tr key={i}>
-                            <td className="px-3 py-2 font-sans font-medium text-white">{diff.parameter}</td>
-                            <td className="px-3 py-2 text-rose-400">{diff.current}</td>
-                            <td className="px-3 py-2 text-emerald-400">→ {diff.projected}</td>
-                            <td className="px-3 py-2">
-                              <span
-                                className={`rounded px-1.5 py-0.5 text-[10px] font-sans font-semibold uppercase ${
-                                  diff.impactLevel === 'critical'
-                                    ? 'bg-rose-500/20 text-rose-300'
-                                    : diff.impactLevel === 'high'
-                                    ? 'bg-amber-500/20 text-amber-300'
-                                    : 'bg-sky-500/20 text-sky-300'
-                                }`}
-                              >
-                                {diff.impactLevel}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Execution Logs */}
-              <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-3 space-y-1 font-mono text-[10px] text-slate-400">
-                <div className="text-[11px] font-bold text-slate-300 font-sans mb-1">Dry-Run Diagnostics</div>
-                {proposal.simulation.logs.map((log, i) => (
-                  <div key={i} className="text-emerald-400/90">{log}</div>
-                ))}
-                <div className="pt-1 text-slate-500 flex justify-between">
-                  <span>Gas: {proposal.simulation.gasEstimateGwei.toLocaleString()} Gwei (${proposal.simulation.gasEstimateUsd})</span>
-                  <span>Execution Time: {proposal.simulation.executionTimeMs}ms</span>
-                </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                  style={{ width: `${quorum.forPercentage}%` }}
+                />
               </div>
             </div>
-          )}
 
-          {/* Community Debate / Comments Section */}
-          <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur-xl space-y-6">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
-              <h3 className="text-lg font-bold text-white">Community Debate ({comments.length})</h3>
-              <span className="text-xs text-slate-400">Stance-verified discussions</span>
+            {/* Against Votes */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-rose-400">Against (No)</span>
+                <span className="font-mono text-slate-200">
+                  {proposal.againstVotes.toLocaleString()} votes ({quorum.againstPercentage}%)
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full bg-rose-500 transition-all duration-300"
+                  style={{ width: `${quorum.againstPercentage}%` }}
+                />
+              </div>
             </div>
 
-            {/* Comment Form */}
-            <form onSubmit={handlePostComment} className="space-y-3 rounded-2xl border border-white/5 bg-slate-950/60 p-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 font-semibold">Your Stance:</span>
-                <div className="flex gap-1.5">
-                  {(['for', 'against', 'neutral'] as const).map((st) => (
+            {/* Abstain Votes */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-400">Abstain</span>
+                <span className="font-mono text-slate-200">
+                  {proposal.abstainVotes.toLocaleString()} votes ({quorum.abstainPercentage}%)
+                </span>
+              </div>
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div
+                  className="h-full bg-slate-500 transition-all duration-300"
+                  style={{ width: `${quorum.abstainPercentage}%` }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Turnout summary card */}
+          <div className="rounded-xl border border-white/5 bg-slate-950/40 p-3 text-xs text-slate-400 flex justify-between">
+            <span>Total Turnout:</span>
+            <span className="font-semibold text-slate-200">{quorum.currentVotes.toLocaleString()} votes cast</span>
+          </div>
+        </div>
+
+        {/* Cast Vote Action Panel */}
+        <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold text-white">Cast Your Vote</h2>
+            <span className="text-xs text-slate-400">
+              Power: <strong className="text-indigo-400">{userVotingPower.toLocaleString()} VN</strong>
+            </span>
+          </div>
+
+          {!isProposalActive ? (
+            <div className="rounded-xl border border-slate-700 bg-slate-950/60 p-6 text-center text-xs text-slate-400">
+              <p className="font-semibold text-slate-300">Voting is closed for this proposal</p>
+              <p className="mt-1">This proposal is currently in <span className="font-bold uppercase">{proposal.status}</span> state.</p>
+            </div>
+          ) : userVotingPower <= 0 ? (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-6 text-center text-xs text-amber-300">
+              <p className="font-semibold">No Available Voting Power</p>
+              <p className="mt-1">
+                Your voting power may be currently delegated or you have 0 VN balance. Check the Delegate Hub to manage delegation.
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleVoteSubmit} className="space-y-4">
+              {/* Choice selector */}
+              <div>
+                <label className="text-xs font-semibold text-slate-300">Select Decision</label>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {(['for', 'against', 'abstain'] as const).map((choice) => (
                     <button
-                      key={st}
+                      key={choice}
                       type="button"
-                      onClick={() => setCommentStance(st)}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-semibold capitalize transition-colors ${
-                        commentStance === st
-                          ? st === 'for'
-                            ? 'bg-emerald-600 text-white'
-                            : st === 'against'
-                            ? 'bg-rose-600 text-white'
-                            : 'bg-slate-700 text-white'
-                          : 'bg-slate-800 text-slate-400 hover:text-white'
+                      onClick={() => setSelectedChoice(choice)}
+                      className={`flex flex-col items-center justify-center rounded-xl border p-3 text-xs font-semibold capitalize transition ${
+                        selectedChoice === choice
+                          ? choice === 'for'
+                            ? 'border-emerald-500 bg-emerald-500/20 text-emerald-300'
+                            : choice === 'against'
+                              ? 'border-rose-500 bg-rose-500/20 text-rose-300'
+                              : 'border-slate-400 bg-slate-700/50 text-slate-200'
+                          : 'border-white/10 bg-slate-950/50 text-slate-400 hover:border-white/20'
                       }`}
                     >
-                      {st}
+                      <span>{choice === 'for' ? '👍 For' : choice === 'against' ? '👎 Against' : '⚪ Abstain'}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <textarea
-                value={commentContent}
-                onChange={(e) => setCommentContent(e.target.value)}
-                placeholder="Share your technical or governance perspective on this proposal..."
-                rows={3}
-                className="w-full rounded-xl border border-white/10 bg-slate-900 p-3 text-xs text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
-              />
+              {/* Voting Power Slider & Input */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <label htmlFor="vote-power-input" className="font-semibold text-slate-300">
+                    Allocated Token Power
+                  </label>
+                  <span className="text-slate-400">{allocatedPower.toLocaleString()} VN</span>
+                </div>
 
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  disabled={!commentContent.trim() || postCommentMutation.isPending}
-                  className="rounded-xl border border-sky-500/30 bg-sky-600 px-4 py-2 text-xs font-bold text-white transition-all hover:bg-sky-500 disabled:opacity-50"
-                >
-                  {postCommentMutation.isPending ? 'Posting...' : 'Post Perspective'}
-                </button>
+                <input
+                  id="vote-power-slider"
+                  type="range"
+                  min={1}
+                  max={userVotingPower}
+                  value={allocatedPower}
+                  onChange={(e) => setAllocatedPower(Number(e.target.value))}
+                  className="w-full accent-indigo-500"
+                  aria-label="Voting power allocation slider"
+                />
+
+                {/* Percentage preset buttons */}
+                <div className="flex items-center gap-1.5">
+                  {[25, 50, 75, 100].map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => handlePercentagePreset(pct)}
+                      className="flex-1 rounded-lg border border-white/10 bg-slate-950/50 py-1 text-[11px] font-medium text-slate-400 hover:border-indigo-500/40 hover:text-white"
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                </div>
               </div>
-            </form>
 
-            {/* Comments List */}
-            <div className="space-y-4">
-              {comments.length === 0 ? (
-                <p className="py-4 text-center text-xs text-slate-500">No community comments yet. Be the first to start the debate!</p>
-              ) : (
-                comments.map((comment) => (
-                  <div key={comment.id} className="rounded-2xl border border-white/5 bg-slate-950/40 p-4 space-y-2">
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        {comment.authorAvatar ? (
-                          <img src={comment.authorAvatar} alt="" className="h-6 w-6 rounded-full object-cover" />
-                        ) : (
-                          <div className="h-6 w-6 rounded-full bg-slate-800" />
-                        )}
-                        <span className="font-semibold text-white">{comment.authorName || 'Voter'}</span>
-                        <span
-                          className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
-                            comment.stance === 'for'
-                              ? 'bg-emerald-500/20 text-emerald-400'
-                              : comment.stance === 'against'
-                              ? 'bg-rose-500/20 text-rose-400'
-                              : 'bg-slate-800 text-slate-400'
-                          }`}
-                        >
-                          {comment.stance}
-                        </span>
-                      </div>
-                      <span className="text-[11px] text-slate-500">
-                        {new Date(comment.timestamp).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-300 leading-relaxed pl-8">{comment.content}</p>
-                  </div>
-                ))
+              {/* Real-time Weight & Gas Preview Box */}
+              <div className="rounded-xl border border-white/10 bg-slate-950/80 p-3.5 space-y-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Tokens Committed:</span>
+                  <span className="font-mono text-slate-200">{allocatedPower.toLocaleString()} VN</span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">
+                    Effective Weight {isQuadratic ? '(√Tokens)' : '(1:1)'}:
+                  </span>
+                  <span className="font-mono font-bold text-indigo-400">
+                    {effectiveWeight.toLocaleString()} votes
+                  </span>
+                </div>
+
+                {isQuadratic && (
+                  <p className="text-[11px] text-purple-300">
+                    ⚡ Quadratic formula reduces whale influence (√{allocatedPower.toLocaleString()} = {effectiveWeight.toLocaleString()})
+                  </p>
+                )}
+
+                <div className="border-t border-white/5 pt-2 flex items-center justify-between text-[11px] text-slate-400">
+                  <span>Estimated Gas Cost:</span>
+                  <span className="font-mono text-slate-300">~0.0024 XLM ($0.0002)</span>
+                </div>
+              </div>
+
+              {/* Feedback alert */}
+              {voteFeedback && (
+                <div
+                  className={`rounded-xl border p-3 text-xs ${
+                    voteFeedback.type === 'success'
+                      ? 'border-emerald-500/40 bg-emerald-950/40 text-emerald-300'
+                      : 'border-rose-500/40 bg-rose-950/40 text-rose-300'
+                  }`}
+                >
+                  <p className="font-semibold">{voteFeedback.message}</p>
+                  {voteFeedback.txHash && (
+                    <p className="mt-1 font-mono text-[10px] text-slate-300 break-all">
+                      Tx: {voteFeedback.txHash}
+                    </p>
+                  )}
+                </div>
               )}
-            </div>
-          </div>
-        </div>
 
-        {/* Right Column: Vote Panel & Distribution Chart */}
-        <div className="space-y-8 lg:col-span-5">
-          {/* Vote Action Panel */}
-          <VotePanel
-            proposal={proposal}
-            onVoteSuccess={() => {
-              refetch();
-            }}
-          />
-
-          {/* Vote Distribution Donut Chart */}
-          <VoteDistributionChart proposal={proposal} />
+              {/* Submit button */}
+              <button
+                type="submit"
+                disabled={isSubmitting || allocatedPower <= 0}
+                className="w-full rounded-xl bg-indigo-600 py-3 text-xs font-bold uppercase tracking-wider text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Submitting Vote On-Chain...' : `Submit Vote (${selectedChoice.toUpperCase()})`}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </div>
-  );
+  )
 }

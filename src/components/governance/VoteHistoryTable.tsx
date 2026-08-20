@@ -1,81 +1,74 @@
-'use client';
+'use client'
 
-/**
- * VoteHistoryTable
- * 
- * Per-user governance vote history table with:
- * - Proposal navigation links
- * - Choice badges (For / Against / Abstain)
- * - Effective Power & Committed Tokens breakdown
- * - On-chain transaction hash links
- * - Gas Cost tracking in Gwei and USD
- * - Pagination controls and CSV export
- */
+import React, { useState } from 'react'
+import {
+  useGovernanceStore,
+  formatVoteHistoryCsv,
+} from '@/src/store/governanceStore'
+import type { VoteChoice } from '@/src/types/governance'
 
-import React, { useState, useMemo } from 'react';
-import { useVoteHistory } from '@/src/hooks/useGovernance';
-import { useWallet } from '@/src/hooks/useWallet';
-import { exportVoteHistoryCsv } from '@/src/services/governanceProposalService';
+function getChoiceBadge(choice: VoteChoice) {
+  switch (choice) {
+    case 'for':
+      return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+    case 'against':
+      return 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+    case 'abstain':
+      return 'bg-slate-700/50 text-slate-300 border-slate-600'
+  }
+}
+
+function truncateHash(hash: string) {
+  if (!hash || hash.length <= 14) return hash
+  return `${hash.slice(0, 8)}...${hash.slice(-6)}`
+}
 
 interface VoteHistoryTableProps {
-  onSelectProposal?: (proposalId: string) => void;
+  onSelectProposal?: (proposalId: string) => void
 }
 
 export function VoteHistoryTable({ onSelectProposal }: VoteHistoryTableProps) {
-  const { activeAccount } = useWallet();
-  const address = activeAccount?.publicKey || '';
+  const { voteHistory, exportVoteHistoryCsv } = useGovernanceStore()
+  const [filterQuery, setFilterQuery] = useState('')
+  const [filterChoice, setFilterChoice] = useState<VoteChoice | 'all'>('all')
 
-  const { data: records = [], isLoading } = useVoteHistory(address);
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
-  const [choiceFilter, setChoiceFilter] = useState<'all' | 'for' | 'against' | 'abstain'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const filteredRecords = useMemo(() => {
-    let list = [...records];
-    if (choiceFilter !== 'all') {
-      list = list.filter((r) => r.choice === choiceFilter);
+  const filteredHistory = voteHistory.filter((record) => {
+    if (filterChoice !== 'all' && record.choice !== filterChoice) {
+      return false
     }
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter(
-        (r) =>
-          r.proposalId.toLowerCase().includes(q) ||
-          r.proposalTitle.toLowerCase().includes(q) ||
-          r.txHash.toLowerCase().includes(q)
-      );
+    if (filterQuery.trim()) {
+      const q = filterQuery.toLowerCase()
+      const matchTitle = record.proposalTitle.toLowerCase().includes(q)
+      const matchId = record.proposalId.toLowerCase().includes(q)
+      const matchTx = record.txHash.toLowerCase().includes(q)
+      if (!matchTitle && !matchId && !matchTx) {
+        return false
+      }
     }
-    return list;
-  }, [records, choiceFilter, searchQuery]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredRecords.length / pageSize));
-  const paginatedRecords = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredRecords.slice(start, start + pageSize);
-  }, [filteredRecords, currentPage, pageSize]);
+    return true
+  })
 
   const handleExportCsv = () => {
-    const csvContent = exportVoteHistoryCsv(filteredRecords);
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `verinode_vote_history_${Date.now()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+    const csvContent = exportVoteHistoryCsv()
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `governance-vote-history-${Date.now()}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-slate-900/80 p-6 backdrop-blur-xl shadow-2xl space-y-6">
-      {/* Header and Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-4">
+    <div className="space-y-6" data-testid="vote-history-table-container">
+      {/* Header and Export Controls */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold text-white">Your Governance Vote History</h3>
-          <p className="text-xs text-slate-400">
-            Track all past on-chain voting transactions, quadratic allocations, and network gas costs.
+          <h2 className="text-lg font-bold text-white">Your Voting History</h2>
+          <p className="mt-0.5 text-xs text-slate-400">
+            Immutable log of all governance votes cast by your account.
           </p>
         </div>
 
@@ -83,165 +76,145 @@ export function VoteHistoryTable({ onSelectProposal }: VoteHistoryTableProps) {
           <button
             type="button"
             onClick={handleExportCsv}
-            disabled={filteredRecords.length === 0}
-            className="flex items-center gap-1.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-300 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+            disabled={voteHistory.length === 0}
+            data-testid="export-csv-button"
+            className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900 px-4 py-2 text-xs font-semibold text-slate-200 hover:border-indigo-500 hover:bg-slate-800 hover:text-white disabled:opacity-40 transition"
           >
-            <span>↓</span> Export CSV
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Export CSV ({voteHistory.length})
           </button>
         </div>
       </div>
 
-      {/* Filters Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400 font-semibold">Filter:</span>
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="w-full sm:w-80">
+          <input
+            type="text"
+            value={filterQuery}
+            onChange={(e) => setFilterQuery(e.target.value)}
+            placeholder="Search by proposal ID, title, or tx hash..."
+            aria-label="Filter vote history"
+            className="w-full rounded-xl border border-white/10 bg-slate-900/90 px-3.5 py-2 text-xs text-slate-100 placeholder-slate-400 focus:border-indigo-500 focus:outline-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-1.5">
           {(['all', 'for', 'against', 'abstain'] as const).map((choice) => (
             <button
               key={choice}
               type="button"
-              onClick={() => {
-                setChoiceFilter(choice);
-                setCurrentPage(1);
-              }}
-              className={`rounded-xl px-3 py-1 text-xs font-semibold capitalize transition-colors ${
-                choiceFilter === choice
-                  ? 'bg-sky-600 text-white'
-                  : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white'
+              onClick={() => setFilterChoice(choice)}
+              className={`rounded-lg px-3 py-1 text-xs font-medium capitalize transition ${
+                filterChoice === choice
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-slate-900/60 text-slate-400 hover:bg-slate-800 hover:text-slate-200'
               }`}
             >
               {choice}
             </button>
           ))}
         </div>
-
-        <div className="w-full sm:w-64">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder="Search votes by proposal or tx hash..."
-            className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:border-sky-500 focus:outline-none"
-          />
-        </div>
       </div>
 
-      {/* Table */}
-      {isLoading ? (
-        <div className="h-48 animate-pulse rounded-2xl bg-slate-950/60" />
-      ) : filteredRecords.length === 0 ? (
-        <div className="rounded-2xl border border-white/5 bg-slate-950/40 p-12 text-center">
-          <p className="text-sm font-semibold text-slate-300">No voting records found</p>
-          <p className="mt-1 text-xs text-slate-500">Votes you cast will automatically appear here with gas tracking.</p>
+      {/* Table Container */}
+      {filteredHistory.length === 0 ? (
+        <div className="rounded-2xl border border-white/5 bg-slate-900/50 p-12 text-center">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-800 text-slate-400">
+            📜
+          </div>
+          <p className="text-base font-semibold text-slate-200">No voting records found</p>
+          <p className="mt-1 text-xs text-slate-400">
+            {voteHistory.length === 0
+              ? 'You have not cast any governance votes yet.'
+              : 'No votes match your filter criteria.'}
+          </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/60">
+        <div className="overflow-x-auto rounded-2xl border border-white/10 bg-slate-900/80">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="border-b border-white/10 bg-slate-900/80 uppercase tracking-wider text-[11px] text-slate-400">
+            <thead className="border-b border-white/10 bg-slate-950/60 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
               <tr>
-                <th className="px-4 py-3">Proposal</th>
-                <th className="px-4 py-3">Decision</th>
-                <th className="px-4 py-3">Vote Power</th>
-                <th className="px-4 py-3">VRN Committed</th>
-                <th className="px-4 py-3">Gas Cost</th>
-                <th className="px-4 py-3">Transaction</th>
-                <th className="px-4 py-3">Timestamp</th>
+                <th className="px-4 py-3.5">Proposal</th>
+                <th className="px-4 py-3.5">Choice</th>
+                <th className="px-4 py-3.5">Voting Power</th>
+                <th className="px-4 py-3.5">Effective Weight</th>
+                <th className="px-4 py-3.5">Mechanism</th>
+                <th className="px-4 py-3.5">Gas Cost</th>
+                <th className="px-4 py-3.5">Tx Hash</th>
+                <th className="px-4 py-3.5">Timestamp</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 font-sans">
-              {paginatedRecords.map((vote) => (
-                <tr key={vote.id} className="transition-colors hover:bg-slate-900/50">
-                  {/* Proposal ID & Title */}
-                  <td className="px-4 py-3.5">
-                    <button
-                      type="button"
-                      onClick={() => onSelectProposal?.(vote.proposalId)}
-                      className="text-left font-bold text-white hover:text-sky-400 hover:underline"
-                    >
-                      <span className="font-mono text-sky-400">{vote.proposalId}</span>: {vote.proposalTitle}
-                    </button>
-                  </td>
+            <tbody className="divide-y divide-white/5 font-mono">
+              {filteredHistory.map((record) => {
+                const isQuadratic = record.votingType === 'quadratic'
 
-                  {/* Choice */}
-                  <td className="px-4 py-3.5">
-                    <span
-                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                        vote.choice === 'for'
-                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                          : vote.choice === 'against'
-                          ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                          : 'bg-slate-700 text-slate-300 border border-slate-600'
-                      }`}
-                    >
-                      {vote.choice}
-                    </span>
-                  </td>
+                return (
+                  <tr
+                    key={record.id}
+                    data-testid={`vote-row-${record.id}`}
+                    className="hover:bg-slate-800/40 transition"
+                  >
+                    {/* Proposal ID & Title */}
+                    <td className="px-4 py-3 font-sans">
+                      <button
+                        type="button"
+                        onClick={() => onSelectProposal?.(record.proposalId)}
+                        className="text-left font-semibold text-white hover:text-indigo-300 transition"
+                      >
+                        <span className="font-mono text-indigo-400 mr-1.5">{record.proposalId}:</span>
+                        <span className="line-clamp-1">{record.proposalTitle}</span>
+                      </button>
+                    </td>
 
-                  {/* Vote Power */}
-                  <td className="px-4 py-3.5 font-mono font-semibold text-white">
-                    {vote.power.toLocaleString()} <span className="text-[10px] text-slate-400">({vote.type})</span>
-                  </td>
+                    {/* Choice */}
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-block rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${getChoiceBadge(
+                          record.choice,
+                        )}`}
+                      >
+                        {record.choice}
+                      </span>
+                    </td>
 
-                  {/* VRN Committed */}
-                  <td className="px-4 py-3.5 font-mono text-slate-300">{vote.tokens.toLocaleString()} VRN</td>
+                    {/* Voting Power */}
+                    <td className="px-4 py-3 font-semibold text-slate-200">
+                      {record.votingPower.toLocaleString()} VN
+                    </td>
 
-                  {/* Gas Cost */}
-                  <td className="px-4 py-3.5 font-mono text-slate-300">
-                    <div>{vote.gasCostGwei.toLocaleString()} Gwei</div>
-                    <div className="text-[10px] text-slate-500">≈ ${vote.gasCostUsd.toFixed(2)}</div>
-                  </td>
+                    {/* Effective Weight */}
+                    <td className="px-4 py-3 font-bold text-indigo-400">
+                      {record.effectiveWeight.toLocaleString()}{' '}
+                      {isQuadratic && <span className="text-[10px] text-purple-300">(√)</span>}
+                    </td>
 
-                  {/* Tx Hash */}
-                  <td className="px-4 py-3.5 font-mono text-sky-400">
-                    <span className="cursor-pointer hover:underline" title={vote.txHash}>
-                      {vote.txHash.slice(0, 8)}...{vote.txHash.slice(-6)}
-                    </span>
-                  </td>
+                    {/* Mechanism */}
+                    <td className="px-4 py-3 font-sans text-slate-400 capitalize">
+                      {record.votingType.replace('-', ' ')}
+                    </td>
 
-                  {/* Timestamp */}
-                  <td className="px-4 py-3.5 text-[11px] text-slate-400">
-                    {new Date(vote.timestamp).toLocaleDateString()} {new Date(vote.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </td>
-                </tr>
-              ))}
+                    {/* Gas Cost */}
+                    <td className="px-4 py-3 text-slate-400">{record.gasCost}</td>
+
+                    {/* Tx Hash */}
+                    <td className="px-4 py-3 text-slate-400" title={record.txHash}>
+                      {truncateHash(record.txHash)}
+                    </td>
+
+                    {/* Timestamp */}
+                    <td className="px-4 py-3 font-sans text-slate-400 whitespace-nowrap">
+                      {new Date(record.timestamp).toLocaleDateString()} {new Date(record.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       )}
-
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-4 pt-2 text-xs text-slate-400">
-          <div>
-            Showing {(currentPage - 1) * pageSize + 1} to{' '}
-            {Math.min(currentPage * pageSize, filteredRecords.length)} of {filteredRecords.length} records
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="rounded-xl border border-white/10 bg-slate-800 px-3 py-1.5 font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span className="font-mono text-white">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              type="button"
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="rounded-xl border border-white/10 bg-slate-800 px-3 py-1.5 font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
     </div>
-  );
+  )
 }
