@@ -43,6 +43,7 @@ function encodeString(value: string): string {
 
 /** Encode a plain JS object as an SCMap ScVal body (base64). */
 function encodeBody(fields: Record<string, unknown>): string {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return nativeToScVal(fields, { type: 'map' as any }).toXDR('base64')
 }
 
