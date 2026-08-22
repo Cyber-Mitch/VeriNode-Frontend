@@ -87,7 +87,6 @@ export function ProposalCard({ proposal, onSelect }: ProposalCardProps) {
             Defeated
           </span>
         );
-      case 'canceled':
       default:
         return (
           <span className="rounded-full border border-slate-700 bg-slate-800 px-2.5 py-0.5 text-xs font-semibold text-slate-400">
