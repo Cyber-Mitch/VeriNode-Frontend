@@ -24,8 +24,7 @@ export function ProposalCreator({ onProposalCreated }: ProposalCreatorProps) {
   const [category, setCategory] = useState<ProposalCategory>('parameter-change')
   const [votingType, setVotingType] = useState<VotingType>('token-weighted')
   const [deposit, setDeposit] = useState<number>(MINIMUM_PROPOSAL_DEPOSIT)
-  type FormProposalAction = Omit<ProposalAction, 'parameters'> & { parameters: string }
-  const [actions, setActions] = useState<FormProposalAction[]>([])
+  const [actions, setActions] = useState<ProposalAction[]>([])
   const [showPreview, setShowPreview] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string; proposalId?: string } | null>(null)
@@ -33,7 +32,7 @@ export function ProposalCreator({ onProposalCreated }: ProposalCreatorProps) {
   const isDepositSufficient = userTokenBalance >= deposit
 
   const handleAddAction = () => {
-    const newAction: FormProposalAction = {
+    const newAction: ProposalAction = {
       id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       target: '',
       functionName: '',
@@ -47,7 +46,7 @@ export function ProposalCreator({ onProposalCreated }: ProposalCreatorProps) {
     setActions(actions.filter((a) => a.id !== id))
   }
 
-  const handleActionChange = (id: string, field: keyof FormProposalAction, value: string) => {
+  const handleActionChange = (id: string, field: keyof ProposalAction, value: string) => {
     setActions(
       actions.map((a) => {
         if (a.id !== id) return a
@@ -102,16 +101,8 @@ export function ProposalCreator({ onProposalCreated }: ProposalCreatorProps) {
         description: description.trim(),
         category,
         votingType,
-        type: votingType,
-        proposer: '',
         deposit,
-        actions: actions.filter((a) => (a.target ?? "").trim() && a.functionName.trim()).map((a) => {
-          let parsedParams = {}
-          try {
-            parsedParams = JSON.parse(a.parameters)
-          } catch (e) {}
-          return { ...a, parameters: parsedParams as Record<string, unknown> }
-        }),
+        actions: actions.filter((a) => a.target.trim() && a.functionName.trim()),
       }
 
       const res = createProposal(input)

@@ -35,6 +35,7 @@ export function ProposalDetail({ proposalId, onBack }: ProposalDetailProps) {
     proposals,
     selectedProposalId,
     userVotingPower,
+    userAddress,
     castVote,
     selectProposal,
   } = useGovernanceStore()
@@ -67,8 +68,8 @@ export function ProposalDetail({ proposalId, onBack }: ProposalDetailProps) {
   }
 
   const quorum = calculateQuorumProgress(proposal)
-  const isQuadratic = (proposal.votingType ?? "token-weighted") === 'quadratic'
-  const effectiveWeight = calculateEffectiveWeight(allocatedPower, (proposal.votingType ?? "token-weighted"))
+  const isQuadratic = proposal.votingType === 'quadratic'
+  const effectiveWeight = calculateEffectiveWeight(allocatedPower, proposal.votingType)
   const isProposalActive = proposal.status === 'active'
 
   const handlePercentagePreset = (pct: number) => {
@@ -145,7 +146,7 @@ export function ProposalDetail({ proposalId, onBack }: ProposalDetailProps) {
               {isQuadratic ? '⚡ Quadratic Voting' : '⚖️ Token-Weighted Voting'}
             </span>
             <span>•</span>
-            <span>Created {proposal.createdAt ? new Date(proposal.createdAt).toLocaleDateString() : 'Unknown'}</span>
+            <span>Created {new Date(proposal.createdAt).toLocaleDateString()}</span>
           </div>
 
           <h1 className="mt-2 text-xl font-bold text-white sm:text-2xl">
@@ -174,7 +175,7 @@ export function ProposalDetail({ proposalId, onBack }: ProposalDetailProps) {
           <div>
             <span className="text-slate-500">Quorum Target</span>
             <p className="mt-0.5 font-semibold text-slate-200">
-              {(proposal.quorum ?? 0).toLocaleString()} votes
+              {proposal.quorum.toLocaleString()} votes
             </p>
           </div>
         </div>
@@ -232,7 +233,7 @@ export function ProposalDetail({ proposalId, onBack }: ProposalDetailProps) {
                   </div>
                   <div className="mt-1 text-slate-400 break-all">
                     <span className="text-slate-500">Parameters: </span>
-                    <span className="text-slate-200">{act.parameters ? JSON.stringify(act.parameters) : ''}</span>
+                    <span className="text-slate-200">{act.parameters}</span>
                   </div>
                 </div>
               ))}

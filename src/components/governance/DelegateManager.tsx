@@ -8,19 +8,24 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { useDelegates, useUserGovernanceProfile, useDelegate } from '@/src/hooks/useGovernance';
+import type { Delegate } from '@/src/types/governance';
+import { useDelegates, useUserGovernanceProfile, useDelegate, useRevokeDelegation } from '@/src/hooks/useGovernance';
 import { useWallet } from '@/src/hooks/useWallet';
-const truncateAddress = (addr: string) => addr.slice(0, 8) + "..." + addr.slice(-4);
 
 export function DelegateManager() {
   const { activeAccount } = useWallet();
   const userAddress = activeAccount?.publicKey || 'GA2C5RFPE6GCKMYYLHGOSKVXT2KEQXZ3Z2Q4F3E4R5T6Y7U8I9OPQRST';
 
-  const { data: delegates = [] } = useDelegates();
+  const { data: delegates = [], isLoading } = useDelegates();
   const { data: profile, refetch: refetchProfile } = useUserGovernanceProfile(userAddress);
   const delegateMutation = useDelegate();
+  const revokeMutation = useRevokeDelegation();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDelegate, setSelectedDelegate] = useState<Delegate | null>(null);
+  const [customAddress, setCustomAddress] = useState('');
+  const [showCustomModal, setShowCustomModal] = useState(false);
+  const [showRevokeModal, setShowRevokeModal] = useState(false);
   const [txSuccess, setTxSuccess] = useState<string | null>(null);
 
   const filteredDelegates = useMemo(() => {
@@ -30,7 +35,7 @@ export function DelegateManager() {
       (d) =>
         d.name.toLowerCase().includes(q) ||
         d.address.toLowerCase().includes(q) ||
-        (d.bio ?? "").toLowerCase().includes(q)
+        d.bio.toLowerCase().includes(q)
     );
   }, [delegates, searchQuery]);
 
@@ -41,9 +46,22 @@ export function DelegateManager() {
         delegateAddress,
       });
       setTxSuccess(res.txHash);
+      setSelectedDelegate(null);
+      setShowCustomModal(false);
       refetchProfile();
     } catch (err) {
       console.error('Failed to delegate:', err);
+    }
+  };
+
+  const handleRevoke = async () => {
+    try {
+      const res = await revokeMutation.mutateAsync(userAddress);
+      setTxSuccess(res.txHash);
+      setShowRevokeModal(false);
+      refetchProfile();
+    } catch (err) {
+      console.error('Failed to revoke delegation:', err);
     }
   };
 
@@ -64,6 +82,7 @@ export function DelegateManager() {
             {profile?.isDelegating ? (
               <button
                 type="button"
+                onClick={() => setShowRevokeModal(true)}
                 className="rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-2.5 text-xs font-bold text-rose-300 transition-colors hover:bg-rose-500/20"
               >
                 Revoke Delegation
@@ -71,6 +90,7 @@ export function DelegateManager() {
             ) : (
               <button
                 type="button"
+                onClick={() => setShowCustomModal(true)}
                 className="rounded-2xl border border-sky-500/30 bg-sky-600 px-4 py-2.5 text-xs font-bold text-white transition-colors hover:bg-sky-500"
               >
                 Delegate to Custom Address
@@ -84,7 +104,7 @@ export function DelegateManager() {
           <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4">
             <span className="text-xs text-slate-400">Your VRN Token Balance</span>
             <p className="mt-1 font-mono text-lg font-bold text-white">
-              {profile?.tokensLocked.toLocaleString() || '45,000'} <span className="text-xs text-slate-400">VRN</span>
+              {profile?.tokenBalance.toLocaleString() || '45,000'} <span className="text-xs text-slate-400">VRN</span>
             </p>
           </div>
           <div className="rounded-2xl border border-white/5 bg-slate-950/60 p-4">
@@ -136,7 +156,7 @@ export function DelegateManager() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {filteredDelegates.map((delegate) => {
-              const isSelected = profile?.delegatedTo === delegate.address
+              const isSelected = currentDelegation === delegate.address
 
               return (
                 <div
