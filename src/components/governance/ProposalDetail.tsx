@@ -145,7 +145,7 @@ export function ProposalDetail({ proposalId, onBack }: ProposalDetailProps) {
               {isQuadratic ? '⚡ Quadratic Voting' : '⚖️ Token-Weighted Voting'}
             </span>
             <span>•</span>
-            <span>Created {new Date(proposal.createdAt).toLocaleDateString()}</span>
+            <span>Created {proposal.createdAt ? new Date(proposal.createdAt).toLocaleDateString() : 'Unknown'}</span>
           </div>
 
           <h1 className="mt-2 text-xl font-bold text-white sm:text-2xl">
@@ -232,7 +232,7 @@ export function ProposalDetail({ proposalId, onBack }: ProposalDetailProps) {
                   </div>
                   <div className="mt-1 text-slate-400 break-all">
                     <span className="text-slate-500">Parameters: </span>
-                    <span className="text-slate-200">{act.parameters}</span>
+                    <span className="text-slate-200">{act.parameters ? JSON.stringify(act.parameters) : ''}</span>
                   </div>
                 </div>
               ))}
